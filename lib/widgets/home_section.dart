@@ -1,0 +1,307 @@
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/library_provider.dart';
+import 'book_card.dart';
+import 'author_card.dart';
+import 'series_card.dart';
+import 'episode_list_sheet.dart';
+
+class HomeSection extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final List<dynamic> entities;
+  final String sectionType;
+  final String sectionId;
+
+  const HomeSection({
+    super.key,
+    required this.title,
+    required this.icon,
+    required this.entities,
+    required this.sectionType,
+    required this.sectionId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    final isContinueListening = sectionId == 'continue-listening';
+    final isAuthorSection = sectionType == 'author' || sectionType == 'authors';
+    final isSeriesSection = sectionType == 'series';
+    final isEpisodeSection = sectionType == 'episode';
+
+    // Check if any entities have recentEpisode (podcast episode sections)
+    final hasEpisodeEntities = !isEpisodeSection && entities.isNotEmpty &&
+        entities.first is Map<String, dynamic> &&
+        (entities.first as Map<String, dynamic>)['recentEpisode'] != null;
+    final effectiveEpisode = isEpisodeSection || hasEpisodeEntities;
+
+    final double cardWidth =
+        isContinueListening ? 300 : (isAuthorSection ? 120 : 140);
+    final double cardHeight =
+        isContinueListening ? 120 : effectiveEpisode ? 200 : (isAuthorSection ? 170 : 200);
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Section header
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                Icon(icon, size: 16, color: cs.primary.withValues(alpha: 0.7)),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: tt.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w500,
+                    color: cs.onSurface.withValues(alpha: 0.8),
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Container(
+                    height: 0.5,
+                    color: cs.outlineVariant.withValues(alpha: 0.2),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Snap-scrolling horizontal list
+          SizedBox(
+            height: cardHeight,
+            child: _SnapScrollList(
+              cardWidth: cardWidth,
+              itemCount: entities.length,
+              itemBuilder: (context, index) {
+                final entity = entities[index];
+
+                if (isAuthorSection) {
+                  return SizedBox(
+                    width: cardWidth,
+                    child: AuthorCard(author: entity),
+                  );
+                }
+
+                if (isSeriesSection) {
+                  return SizedBox(
+                    width: cardWidth,
+                    child: SeriesCard(series: entity),
+                  );
+                }
+
+                // Podcast episode sections — show cover with episode title overlay
+                if (isEpisodeSection && entity is Map<String, dynamic>) {
+                  return SizedBox(
+                    width: cardWidth,
+                    child: _EpisodeCard(item: entity),
+                  );
+                }
+
+                // If entity has recentEpisode (podcast continue-listening etc),
+                // use episode card even if section type isn't explicitly 'episode'
+                if (entity is Map<String, dynamic> &&
+                    entity['recentEpisode'] != null) {
+                  return SizedBox(
+                    width: cardWidth,
+                    child: _EpisodeCard(item: entity),
+                  );
+                }
+
+                return SizedBox(
+                  width: cardWidth,
+                  child: BookCard(
+                    item: entity,
+                    showProgress: isContinueListening,
+                    isWide: isContinueListening,
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A horizontal scrolling list with smooth snap-to-card behavior.
+class _SnapScrollList extends StatefulWidget {
+  final double cardWidth;
+  final int itemCount;
+  final Widget Function(BuildContext, int) itemBuilder;
+
+  const _SnapScrollList({
+    required this.cardWidth,
+    required this.itemCount,
+    required this.itemBuilder,
+  });
+
+  @override
+  State<_SnapScrollList> createState() => _SnapScrollListState();
+}
+
+class _SnapScrollListState extends State<_SnapScrollList> {
+  late final ScrollController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = ScrollController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final itemExtent = widget.cardWidth + 12;
+
+    return NotificationListener<ScrollEndNotification>(
+      onNotification: (notification) {
+        final offset = _controller.offset;
+        final targetIndex = (offset / itemExtent).round();
+        final targetOffset =
+            (targetIndex * itemExtent).clamp(0.0, _controller.position.maxScrollExtent);
+        if ((offset - targetOffset).abs() > 1) {
+          Future.microtask(() {
+            if (_controller.hasClients) {
+              _controller.animateTo(
+                targetOffset,
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutCubic,
+              );
+            }
+          });
+        }
+        return false;
+      },
+      child: ListView.separated(
+        controller: _controller,
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        physics: const BouncingScrollPhysics(),
+        itemCount: widget.itemCount,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: widget.itemBuilder,
+      ),
+    );
+  }
+}
+
+/// Card for episodes in podcast sections (e.g. episodes-recently-added).
+/// Shows the show cover with the episode title overlaid at the bottom.
+class _EpisodeCard extends StatelessWidget {
+  final Map<String, dynamic> item;
+
+  const _EpisodeCard({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final lib = context.watch<LibraryProvider>();
+
+    final itemId = item['id'] as String? ?? '';
+    final media = item['media'] as Map<String, dynamic>? ?? {};
+    final metadata = media['metadata'] as Map<String, dynamic>? ?? {};
+    final showTitle = metadata['title'] as String? ?? '';
+    final coverUrl = lib.getCoverUrl(itemId);
+
+    // Get episode info from recentEpisode
+    final episode = item['recentEpisode'] as Map<String, dynamic>?;
+    final episodeTitle = episode?['title'] as String? ?? showTitle;
+
+    return GestureDetector(
+      onTap: () {
+        if (episode != null) {
+          EpisodeDetailSheet.show(context, item, episode);
+        } else {
+          EpisodeListSheet.show(context, item);
+        }
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Square cover
+          AspectRatio(
+            aspectRatio: 1,
+            child: Card(
+              elevation: 0,
+              margin: EdgeInsets.zero,
+              color: cs.surfaceContainerHigh,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (coverUrl != null)
+                    coverUrl.startsWith('/')
+                        ? Image.file(File(coverUrl), fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
+                              color: cs.surfaceContainerHigh,
+                              child: Icon(Icons.podcasts_rounded, size: 32,
+                                color: cs.onSurfaceVariant.withValues(alpha: 0.3))))
+                        : Image.network(coverUrl, fit: BoxFit.cover,
+                            headers: lib.mediaHeaders,
+                            errorBuilder: (_, __, ___) => Container(
+                              color: cs.surfaceContainerHigh,
+                              child: Icon(Icons.podcasts_rounded, size: 32,
+                                color: cs.onSurfaceVariant.withValues(alpha: 0.3))))
+                  else
+                    Container(
+                      color: cs.surfaceContainerHigh,
+                      child: Icon(Icons.podcasts_rounded, size: 32,
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.3)),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          // Episode title
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: Text(
+              episodeTitle,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: tt.labelMedium?.copyWith(
+                fontWeight: FontWeight.w500,
+                color: cs.onSurface,
+              ),
+            ),
+          ),
+          // Show name
+          if (showTitle.isNotEmpty && episode != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Text(
+                showTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: tt.labelSmall?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}

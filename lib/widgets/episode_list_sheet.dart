@@ -1,0 +1,1104 @@
+import 'dart:ui';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import '../providers/library_provider.dart';
+import '../services/audio_player_service.dart';
+import '../services/download_service.dart';
+import '../services/chromecast_service.dart';
+import '../providers/auth_provider.dart';
+
+/// Bottom sheet that shows a podcast's episode list.
+/// Mirrors the UX of [BookDetailSheet] but adapted for podcast shows.
+class EpisodeListSheet extends StatefulWidget {
+  final Map<String, dynamic> podcastItem;
+  final ScrollController? scrollController;
+
+  const EpisodeListSheet({super.key, required this.podcastItem})
+      : scrollController = null;
+
+  const EpisodeListSheet._({
+    required this.podcastItem,
+    required this.scrollController,
+  }) : super(key: null);
+
+  /// Show the episode list as a modal bottom sheet.
+  static void show(BuildContext context, Map<String, dynamic> podcastItem) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.85,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (_, scrollController) => EpisodeListSheet._(
+          podcastItem: podcastItem,
+          scrollController: scrollController,
+        ),
+      ),
+    );
+  }
+
+  @override
+  State<EpisodeListSheet> createState() => _EpisodeListSheetState();
+}
+
+class _EpisodeListSheetState extends State<EpisodeListSheet> {
+  List<dynamic> _episodes = [];
+  bool _isLoading = true;
+  bool _descriptionExpanded = false;
+  bool _isDownloadingAll = false;
+
+  String get _itemId => widget.podcastItem['id'] as String? ?? '';
+
+  Map<String, dynamic> get _media =>
+      widget.podcastItem['media'] as Map<String, dynamic>? ?? {};
+
+  Map<String, dynamic> get _metadata =>
+      _media['metadata'] as Map<String, dynamic>? ?? {};
+
+  String get _title => _metadata['title'] as String? ?? 'Unknown Podcast';
+  String get _author => _metadata['author'] as String? ?? '';
+  String get _description => _metadata['description'] as String? ?? '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadEpisodes();
+  }
+
+  Future<void> _loadEpisodes() async {
+    // Episodes may already be in the item from expanded=1 or from the library list
+    final existing = _media['episodes'] as List<dynamic>?;
+    if (existing != null && existing.isNotEmpty) {
+      setState(() {
+        _episodes = _sortEpisodes(existing);
+        _isLoading = false;
+      });
+      return;
+    }
+
+    // Otherwise fetch the full item
+    final auth = context.read<AuthProvider>();
+    final api = auth.apiService;
+    if (api == null) {
+      setState(() => _isLoading = false);
+      return;
+    }
+
+    final fullItem = await api.getLibraryItem(_itemId);
+    if (fullItem != null && mounted) {
+      final media = fullItem['media'] as Map<String, dynamic>? ?? {};
+      final episodes = media['episodes'] as List<dynamic>? ?? [];
+      setState(() {
+        _episodes = _sortEpisodes(episodes);
+        _isLoading = false;
+      });
+    } else {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  /// Sort episodes newest first by publishedAt.
+  List<dynamic> _sortEpisodes(List<dynamic> episodes) {
+    final sorted = List<dynamic>.from(episodes);
+    sorted.sort((a, b) {
+      final aTime = (a['publishedAt'] as num?)?.toInt() ?? 0;
+      final bTime = (b['publishedAt'] as num?)?.toInt() ?? 0;
+      return bTime.compareTo(aTime); // newest first
+    });
+    return sorted;
+  }
+
+  Future<void> _playEpisode(Map<String, dynamic> episode) async {
+    final auth = context.read<AuthProvider>();
+    final api = auth.apiService;
+    if (api == null) return;
+
+    final episodeId = episode['id'] as String? ?? '';
+    final episodeTitle = episode['title'] as String? ?? 'Episode';
+    final duration = (episode['duration'] as num?)?.toDouble() ?? 0;
+    final coverUrl = api.getCoverUrl(_itemId);
+
+    // Check if Chromecast is connected
+    final cast = ChromecastService();
+    if (cast.isConnected) {
+      await cast.castItem(
+        api: api,
+        itemId: _itemId,
+        title: episodeTitle,
+        author: _title,
+        coverUrl: coverUrl,
+        totalDuration: duration,
+        chapters: [],
+      );
+      if (mounted) Navigator.pop(context);
+      return;
+    }
+
+    final player = AudioPlayerService();
+    await player.playItem(
+      api: api,
+      itemId: _itemId,
+      title: episodeTitle,
+      author: _title,
+      coverUrl: coverUrl,
+      totalDuration: duration,
+      chapters: [],
+      episodeId: episodeId,
+      episodeTitle: episodeTitle,
+    );
+    if (mounted) Navigator.pop(context);
+  }
+
+  Future<void> _downloadEpisode(Map<String, dynamic> episode) async {
+    final auth = context.read<AuthProvider>();
+    final api = auth.apiService;
+    if (api == null) return;
+
+    final episodeId = episode['id'] as String? ?? '';
+    final episodeTitle = episode['title'] as String? ?? 'Episode';
+    final coverUrl = api.getCoverUrl(_itemId);
+
+    final error = await DownloadService().downloadItem(
+      api: api,
+      itemId: '$_itemId-$episodeId',
+      title: episodeTitle,
+      author: _title,
+      coverUrl: coverUrl,
+      episodeId: episodeId,
+    );
+
+    if (error != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+    }
+  }
+
+  Future<void> _downloadAll() async {
+    final auth = context.read<AuthProvider>();
+    final api = auth.apiService;
+    if (api == null) return;
+
+    setState(() => _isDownloadingAll = true);
+
+    for (final ep in _episodes) {
+      if (!mounted) break;
+      final episodeId = ep['id'] as String? ?? '';
+      final key = '$_itemId-$episodeId';
+      if (DownloadService().isDownloaded(key) || DownloadService().isDownloading(key)) continue;
+
+      await DownloadService().downloadItem(
+        api: api,
+        itemId: key,
+        title: ep['title'] as String? ?? 'Episode',
+        author: _title,
+        coverUrl: api.getCoverUrl(_itemId),
+        episodeId: episodeId,
+      );
+    }
+
+    if (mounted) setState(() => _isDownloadingAll = false);
+  }
+
+  String? get _coverUrl {
+    final auth = context.read<AuthProvider>();
+    return auth.apiService?.getCoverUrl(_itemId, width: 800);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
+    final lib = context.watch<LibraryProvider>();
+    final coverUrl = _coverUrl;
+
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: const BoxDecoration(
+        color: Color(0xFF111111),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Stack(children: [
+        // Blurred cover background
+        if (coverUrl != null)
+          Positioned.fill(
+            child: RepaintBoundary(
+              child: CachedNetworkImage(
+                imageUrl: coverUrl, fit: BoxFit.cover,
+                httpHeaders: lib.mediaHeaders,
+                imageBuilder: (_, p) => ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: 50, sigmaY: 50, tileMode: TileMode.decal),
+                  child: Image(image: p, fit: BoxFit.cover)),
+                placeholder: (_, __) => const SizedBox(),
+                errorWidget: (_, __, ___) => const SizedBox(),
+              ),
+            ),
+          ),
+        // Gradient overlay
+        Positioned.fill(child: DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(
+          begin: Alignment.topCenter, end: Alignment.bottomCenter,
+          colors: [
+            const Color(0xFF111111).withValues(alpha: 0.6),
+            const Color(0xFF111111).withValues(alpha: 0.85),
+            const Color(0xFF111111),
+          ],
+        )))),
+        // Content
+        Column(children: [
+          // Drag handle
+          Center(child: Container(width: 40, height: 4, margin: const EdgeInsets.only(top: 8, bottom: 4),
+            decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
+
+          // ── Header (non-scrollable) ──
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+            child: Column(children: [
+              // Show title (centered)
+              Text(_title, textAlign: TextAlign.center,
+                style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w700, color: Colors.white)),
+              if (_author.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(_author, textAlign: TextAlign.center,
+                  style: tt.bodyMedium?.copyWith(color: Colors.white60)),
+              ],
+
+              // Description
+              if (_description.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                GestureDetector(
+                  onTap: () => setState(() => _descriptionExpanded = !_descriptionExpanded),
+                  child: Text(_description,
+                    maxLines: _descriptionExpanded ? 100 : 2,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: tt.bodySmall?.copyWith(color: Colors.white38, height: 1.4)),
+                ),
+              ],
+
+              // Metadata chips
+              const SizedBox(height: 12),
+              Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.center, children: [
+                if (!_isLoading) _chip(Icons.podcasts_rounded, '${_episodes.length} episode${_episodes.length == 1 ? '' : 's'}'),
+              ]),
+
+              // Download All button (reactive)
+              if (_episodes.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                ListenableBuilder(
+                  listenable: DownloadService(),
+                  builder: (_, __) {
+                    final dl = DownloadService();
+                    int downloaded = 0;
+                    int downloading = 0;
+                    double totalProgress = 0;
+                    for (final ep in _episodes) {
+                      final eid = ep['id'] as String? ?? '';
+                      final key = '$_itemId-$eid';
+                      if (dl.isDownloaded(key)) {
+                        downloaded++;
+                      } else if (dl.isDownloading(key)) {
+                        downloading++;
+                        totalProgress += dl.downloadProgress(key);
+                      }
+                    }
+                    final allDone = downloaded == _episodes.length;
+                    final anyActive = _isDownloadingAll || downloading > 0;
+                    final overallProgress = _episodes.isNotEmpty
+                        ? (downloaded + totalProgress) / _episodes.length
+                        : 0.0;
+
+                    if (allDone) {
+                      return GestureDetector(
+                        child: Container(height: 44,
+                          decoration: BoxDecoration(
+                            color: Colors.greenAccent.withValues(alpha: 0.06),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.15)),
+                          ),
+                          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            Icon(Icons.download_done_rounded, size: 16, color: Colors.greenAccent.withValues(alpha: 0.7)),
+                            const SizedBox(width: 6),
+                            Text('All Episodes Downloaded',
+                              style: TextStyle(color: Colors.greenAccent.withValues(alpha: 0.7), fontSize: 12, fontWeight: FontWeight.w500)),
+                          ])),
+                      );
+                    }
+
+                    return GestureDetector(
+                      onTap: anyActive ? null : _downloadAll,
+                      child: Container(height: 44,
+                        clipBehavior: Clip.antiAlias,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                        ),
+                        child: Stack(children: [
+                          if (anyActive)
+                            FractionallySizedBox(
+                              widthFactor: overallProgress.clamp(0.0, 1.0),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(13),
+                                ),
+                              ),
+                            ),
+                          Center(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            if (anyActive)
+                              SizedBox(width: 14, height: 14,
+                                child: CircularProgressIndicator(strokeWidth: 2,
+                                  color: Theme.of(context).colorScheme.primary))
+                            else
+                              const Icon(Icons.download_rounded, size: 16, color: Colors.white54),
+                            const SizedBox(width: 6),
+                            Text(
+                              anyActive
+                                  ? 'Downloading ${downloaded + downloading}/${_episodes.length} · ${(overallProgress * 100).toStringAsFixed(0)}%'
+                                  : downloaded > 0
+                                      ? 'Download Remaining (${_episodes.length - downloaded})'
+                                      : 'Download All Episodes',
+                              style: TextStyle(
+                                color: anyActive ? Theme.of(context).colorScheme.primary : Colors.white54,
+                                fontSize: 12, fontWeight: FontWeight.w500)),
+                          ])),
+                        ]),
+                      ),
+                    );
+                  },
+                ),
+              ],
+
+              // Episodes section header
+              const SizedBox(height: 16),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Episodes', style: tt.titleSmall?.copyWith(color: Colors.white54, fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(height: 4),
+            ]),
+          ),
+
+          // ── Scrollable episode list ──
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white24))
+                : _episodes.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.podcasts_rounded, size: 48, color: Colors.white.withValues(alpha: 0.15)),
+                            const SizedBox(height: 12),
+                            Text('No episodes found', style: tt.bodyMedium?.copyWith(color: Colors.white38)),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        controller: widget.scrollController,
+                        padding: EdgeInsets.only(bottom: 32 + MediaQuery.of(context).viewPadding.bottom),
+                        itemCount: _episodes.length,
+                        itemBuilder: (context, index) {
+                          final ep = _episodes[index] as Map<String, dynamic>;
+                          return _EpisodeRow(
+                            episode: ep,
+                            podcastItem: widget.podcastItem,
+                            itemId: _itemId,
+                            podcastTitle: _title,
+                            onPlay: () => _playEpisode(ep),
+                            onDownload: () => _downloadEpisode(ep),
+                          );
+                        },
+                      ),
+          ),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _chip(IconData icon, String text) {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 200),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08))),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 12, color: Colors.white38), const SizedBox(width: 4),
+        Flexible(child: Text(text, overflow: TextOverflow.ellipsis, maxLines: 1,
+          style: const TextStyle(color: Colors.white54, fontSize: 11)))]));
+  }
+}
+
+// ── Episode Detail Sheet ──
+
+class EpisodeDetailSheet extends StatefulWidget {
+  final Map<String, dynamic> podcastItem;
+  final Map<String, dynamic> episode;
+  final ScrollController? scrollController;
+
+  const EpisodeDetailSheet({super.key, required this.podcastItem, required this.episode})
+      : scrollController = null;
+
+  const EpisodeDetailSheet._({
+    required this.podcastItem,
+    required this.episode,
+    required this.scrollController,
+  }) : super(key: null);
+
+  static void show(BuildContext context, Map<String, dynamic> podcastItem, Map<String, dynamic> episode) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.75,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (_, scrollController) => EpisodeDetailSheet._(
+          podcastItem: podcastItem,
+          episode: episode,
+          scrollController: scrollController,
+        ),
+      ),
+    );
+  }
+
+  @override
+  State<EpisodeDetailSheet> createState() => _EpisodeDetailSheetState();
+}
+
+class _EpisodeDetailSheetState extends State<EpisodeDetailSheet> {
+  bool _descriptionExpanded = false;
+
+  String get _itemId => widget.podcastItem['id'] as String? ?? '';
+
+  String get _showTitle {
+    final media = widget.podcastItem['media'] as Map<String, dynamic>? ?? {};
+    final meta = media['metadata'] as Map<String, dynamic>? ?? {};
+    return meta['title'] as String? ?? '';
+  }
+
+  String get _episodeTitle => widget.episode['title'] as String? ?? 'Episode';
+  String get _episodeId => widget.episode['id'] as String? ?? '';
+  double get _duration => (widget.episode['duration'] as num?)?.toDouble() ?? 0;
+  int get _publishedAt => (widget.episode['publishedAt'] as num?)?.toInt() ?? 0;
+  String? get _episodeNumber => widget.episode['episode'] as String?;
+  String? get _season => widget.episode['season'] as String?;
+
+  String get _cleanDescription {
+    final desc = widget.episode['description'] as String? ?? '';
+    return desc
+        .replaceAll(RegExp(r'<[^>]*>'), '')
+        .replaceAll('&nbsp;', ' ')
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .trim();
+  }
+
+  Future<void> _play() async {
+    final auth = context.read<AuthProvider>();
+    final api = auth.apiService;
+    if (api == null) return;
+
+    final cast = ChromecastService();
+    if (cast.isConnected) {
+      await cast.castItem(
+        api: api, itemId: _itemId, title: _episodeTitle, author: _showTitle,
+        coverUrl: api.getCoverUrl(_itemId), totalDuration: _duration, chapters: [],
+      );
+      if (mounted) Navigator.pop(context);
+      return;
+    }
+
+    await AudioPlayerService().playItem(
+      api: api, itemId: _itemId, title: _episodeTitle, author: _showTitle,
+      coverUrl: api.getCoverUrl(_itemId), totalDuration: _duration, chapters: [],
+      episodeId: _episodeId,
+      episodeTitle: _episodeTitle,
+    );
+    if (mounted) Navigator.pop(context);
+  }
+
+  Future<void> _download() async {
+    final auth = context.read<AuthProvider>();
+    final api = auth.apiService;
+    if (api == null) return;
+
+    final error = await DownloadService().downloadItem(
+      api: api,
+      itemId: '$_itemId-$_episodeId',
+      title: _episodeTitle,
+      author: _showTitle,
+      coverUrl: api.getCoverUrl(_itemId),
+      episodeId: _episodeId,
+    );
+    if (error != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+    }
+  }
+
+  Future<void> _toggleFinished() async {
+    final auth = context.read<AuthProvider>();
+    final api = auth.apiService;
+    if (api == null) return;
+    final lib = context.read<LibraryProvider>();
+    final key = '$_itemId-$_episodeId';
+    final progressData = lib.getEpisodeProgressData(_itemId, _episodeId);
+    final isFinished = progressData?['isFinished'] == true;
+    final currentTime = (progressData?['currentTime'] as num?)?.toDouble() ?? 0;
+
+    try {
+      if (isFinished) {
+        // Un-finish — keep current position
+        await api.updateEpisodeProgress(
+          _itemId, _episodeId,
+          currentTime: currentTime,
+          duration: _duration,
+          isFinished: false,
+        );
+        await lib.refresh();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: const Text('Marked as not finished'),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ));
+        }
+      } else {
+        // Mark finished — update server then local state for instant UI
+        await api.updateEpisodeProgress(
+          _itemId, _episodeId,
+          currentTime: _duration,
+          duration: _duration,
+          isFinished: true,
+        );
+        lib.markFinishedLocally(key);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: const Text('Marked as finished — nice!'),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ));
+        }
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Failed to update — check your connection')));
+      }
+    }
+  }
+
+  String? get _coverUrl {
+    final auth = context.read<AuthProvider>();
+    return auth.apiService?.getCoverUrl(_itemId, width: 800);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final lib = context.watch<LibraryProvider>();
+    final coverUrl = _coverUrl;
+
+    final dlKey = '$_itemId-$_episodeId';
+
+    final progress = lib.getEpisodeProgress(_itemId, _episodeId);
+    final progressData = lib.getEpisodeProgressData(_itemId, _episodeId);
+    final isFinished = progressData?['isFinished'] == true;
+
+    String dateLabel = '';
+    if (_publishedAt > 0) {
+      final date = DateTime.fromMillisecondsSinceEpoch(_publishedAt);
+      final diff = DateTime.now().difference(date);
+      if (diff.inDays == 0) dateLabel = 'Today';
+      else if (diff.inDays == 1) dateLabel = 'Yesterday';
+      else if (diff.inDays < 7) dateLabel = '${diff.inDays}d ago';
+      else if (diff.inDays < 30) dateLabel = '${(diff.inDays / 7).floor()}w ago';
+      else dateLabel = '${date.month}/${date.day}/${date.year}';
+    }
+
+    String durationLabel = '';
+    if (_duration > 0) {
+      final h = (_duration / 3600).floor();
+      final m = ((_duration % 3600) / 60).floor();
+      durationLabel = h > 0 ? '${h}h ${m}m' : '${m}m';
+    }
+
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: const BoxDecoration(
+        color: Color(0xFF111111),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Stack(children: [
+        // Blurred cover background
+        if (coverUrl != null)
+          Positioned.fill(
+            child: RepaintBoundary(
+              child: CachedNetworkImage(
+                imageUrl: coverUrl, fit: BoxFit.cover,
+                httpHeaders: lib.mediaHeaders,
+                imageBuilder: (_, p) => ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: 50, sigmaY: 50, tileMode: TileMode.decal),
+                  child: Image(image: p, fit: BoxFit.cover)),
+                placeholder: (_, __) => const SizedBox(),
+                errorWidget: (_, __, ___) => const SizedBox(),
+              ),
+            ),
+          ),
+        // Gradient overlay
+        Positioned.fill(child: DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(
+          begin: Alignment.topCenter, end: Alignment.bottomCenter,
+          colors: [
+            const Color(0xFF111111).withValues(alpha: 0.6),
+            const Color(0xFF111111).withValues(alpha: 0.85),
+            const Color(0xFF111111),
+          ],
+        )))),
+        // Content
+        ListView(
+          controller: widget.scrollController,
+          padding: EdgeInsets.fromLTRB(20, 8, 20, 32 + MediaQuery.of(context).viewPadding.bottom),
+          children: [
+            // Drag handle
+            Center(child: Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
+
+            // Episode title (centered)
+            Text(_episodeTitle, textAlign: TextAlign.center,
+              style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w700, color: Colors.white)),
+            const SizedBox(height: 4),
+
+            // Show title
+            if (_showTitle.isNotEmpty)
+              Text(_showTitle, textAlign: TextAlign.center,
+                style: tt.bodyMedium?.copyWith(color: Colors.white60)),
+
+            const SizedBox(height: 12),
+
+            // Progress bar
+            if (progress > 0) ...[
+              ClipRRect(borderRadius: BorderRadius.circular(3),
+                child: LinearProgressIndicator(
+                  value: progress.clamp(0.0, 1.0), minHeight: 4,
+                  backgroundColor: Colors.white.withValues(alpha: 0.1),
+                  valueColor: AlwaysStoppedAnimation(
+                    isFinished ? cs.primary.withValues(alpha: 0.4) : cs.primary),
+                )),
+              const SizedBox(height: 4),
+              Text('${(progress * 100).toStringAsFixed(1)}% complete', textAlign: TextAlign.center,
+                style: tt.labelSmall?.copyWith(color: Colors.white38)),
+              const SizedBox(height: 12),
+            ],
+
+            // Play button (full width, matching book detail)
+            SizedBox(height: 52, child: FilledButton.icon(
+              onPressed: _play,
+              icon: Icon(
+                progress > 0 && !isFinished ? Icons.play_arrow_rounded : Icons.podcasts_rounded,
+                size: 24,
+              ),
+              label: Text(
+                progress > 0 && !isFinished ? 'Resume' : 'Play Episode',
+                style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w600, color: cs.onPrimary),
+              ),
+              style: FilledButton.styleFrom(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+            )),
+            const SizedBox(height: 12),
+
+            // Download + Finished row
+            Row(children: [
+              Expanded(child: ListenableBuilder(
+                listenable: DownloadService(),
+                builder: (context, _) {
+                  final dl = DownloadService();
+                  final downloaded = dl.isDownloaded(dlKey);
+                  final downloading = dl.isDownloading(dlKey);
+                  final dlProgress = dl.downloadProgress(dlKey);
+
+                  final IconData icon;
+                  final String label;
+                  final Color color;
+                  if (downloaded) {
+                    icon = Icons.download_done_rounded;
+                    label = 'Downloaded';
+                    color = Colors.greenAccent.withValues(alpha: 0.7);
+                  } else if (downloading) {
+                    icon = Icons.downloading_rounded;
+                    label = '${(dlProgress * 100).toStringAsFixed(0)}%';
+                    color = cs.primary;
+                  } else {
+                    icon = Icons.download_outlined;
+                    label = 'Download';
+                    color = Colors.white54;
+                  }
+
+                  return GestureDetector(
+                    onTap: (downloaded || downloading) ? null : _download,
+                    child: Container(
+                      height: 36,
+                      clipBehavior: Clip.antiAlias,
+                      decoration: BoxDecoration(
+                        color: downloaded ? Colors.greenAccent.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: downloaded ? Colors.greenAccent.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.08)),
+                      ),
+                      child: Stack(children: [
+                        if (downloading)
+                          FractionallySizedBox(
+                            widthFactor: dlProgress.clamp(0.0, 1.0),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: cs.primary.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(13),
+                              ),
+                            ),
+                          ),
+                        Center(child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                          Icon(icon, size: 16, color: color),
+                          const SizedBox(width: 6),
+                          Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w500)),
+                        ])),
+                      ]),
+                    ),
+                  );
+                },
+              )),
+              const SizedBox(width: 10),
+              Expanded(child: GestureDetector(
+                onTap: _toggleFinished,
+                child: Container(
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: isFinished ? Colors.green.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: isFinished ? Colors.green.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.08)),
+                  ),
+                  child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Icon(
+                      isFinished ? Icons.check_circle_rounded : Icons.check_circle_outline_rounded,
+                      size: 16,
+                      color: isFinished ? Colors.green : Colors.white54,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      isFinished ? 'Finished' : 'Mark Finished',
+                      style: TextStyle(
+                        color: isFinished ? Colors.green : Colors.white54,
+                        fontSize: 12, fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ]),
+                ),
+              )),
+            ]),
+
+            // Metadata chips
+            const SizedBox(height: 16),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              if (dateLabel.isNotEmpty) _chip(Icons.calendar_today_rounded, dateLabel),
+              if (durationLabel.isNotEmpty) _chip(Icons.schedule_rounded, durationLabel),
+              if (_episodeNumber != null) _chip(Icons.tag_rounded, 'Episode $_episodeNumber'),
+              if (_season != null) _chip(Icons.layers_rounded, 'Season $_season'),
+            ]),
+
+            // All Episodes button (series-style)
+            const SizedBox(height: 16),
+            GestureDetector(
+              onTap: () {
+                Navigator.pop(context);
+                EpisodeListSheet.show(context, widget.podcastItem);
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: cs.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: cs.primary.withValues(alpha: 0.15)),
+                ),
+                child: Row(children: [
+                  Icon(Icons.podcasts_rounded, size: 16, color: cs.primary.withValues(alpha: 0.7)),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text('All Episodes',
+                    style: tt.bodySmall?.copyWith(color: cs.primary.withValues(alpha: 0.9), fontWeight: FontWeight.w500))),
+                  Icon(Icons.chevron_right_rounded, size: 18, color: cs.primary.withValues(alpha: 0.5)),
+                ]),
+              ),
+            ),
+
+            // Description
+            if (_cleanDescription.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Text('About This Episode', style: tt.titleSmall?.copyWith(color: Colors.white54, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              GestureDetector(
+                onTap: () => setState(() => _descriptionExpanded = !_descriptionExpanded),
+                child: Text(_cleanDescription,
+                  maxLines: _descriptionExpanded ? 200 : 4,
+                  overflow: TextOverflow.ellipsis,
+                  style: tt.bodySmall?.copyWith(color: Colors.white70, height: 1.5)),
+              ),
+              if (_cleanDescription.length > 200)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: GestureDetector(
+                    onTap: () => setState(() => _descriptionExpanded = !_descriptionExpanded),
+                    child: Text(
+                      _descriptionExpanded ? 'Show less' : 'Show more',
+                      style: TextStyle(fontSize: 12, color: cs.primary, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ]),
+    );
+  }
+
+  Widget _chip(IconData icon, String text) {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 200),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08))),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 12, color: Colors.white38), const SizedBox(width: 4),
+        Flexible(child: Text(text, overflow: TextOverflow.ellipsis, maxLines: 1,
+          style: const TextStyle(color: Colors.white54, fontSize: 11)))]));
+  }
+}
+
+// ── Episode Row ──
+
+class _EpisodeRow extends StatefulWidget {
+  final Map<String, dynamic> episode;
+  final Map<String, dynamic> podcastItem;
+  final String itemId;
+  final String podcastTitle;
+  final VoidCallback onPlay;
+  final VoidCallback onDownload;
+
+  const _EpisodeRow({
+    required this.episode,
+    required this.podcastItem,
+    required this.itemId,
+    required this.podcastTitle,
+    required this.onPlay,
+    required this.onDownload,
+  });
+
+  @override
+  State<_EpisodeRow> createState() => _EpisodeRowState();
+}
+
+class _EpisodeRowState extends State<_EpisodeRow> {
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final lib = context.watch<LibraryProvider>();
+    final ep = widget.episode;
+
+    final title = ep['title'] as String? ?? 'Episode';
+    final episodeId = ep['id'] as String? ?? '';
+    final duration = (ep['duration'] as num?)?.toDouble() ?? 0;
+    final publishedAt = (ep['publishedAt'] as num?)?.toInt() ?? 0;
+
+    // Progress
+    final progress = lib.getEpisodeProgress(widget.itemId, episodeId);
+    final progressData = lib.getEpisodeProgressData(widget.itemId, episodeId);
+    final isFinished = progressData?['isFinished'] == true;
+
+    // Download key for reactive lookups
+    final dlKey = '${widget.itemId}-$episodeId';
+
+    // Format publish date
+    String dateLabel = '';
+    if (publishedAt > 0) {
+      final date = DateTime.fromMillisecondsSinceEpoch(publishedAt);
+      final now = DateTime.now();
+      final diff = now.difference(date);
+      if (diff.inDays == 0) {
+        dateLabel = 'Today';
+      } else if (diff.inDays == 1) {
+        dateLabel = 'Yesterday';
+      } else if (diff.inDays < 7) {
+        dateLabel = '${diff.inDays}d ago';
+      } else if (diff.inDays < 30) {
+        dateLabel = '${(diff.inDays / 7).floor()}w ago';
+      } else if (diff.inDays < 365) {
+        dateLabel = '${date.month}/${date.day}';
+      } else {
+        dateLabel = '${date.month}/${date.day}/${date.year}';
+      }
+    }
+
+    // Format duration
+    String durationLabel = '';
+    if (duration > 0) {
+      final h = (duration / 3600).floor();
+      final m = ((duration % 3600) / 60).floor();
+      if (h > 0) {
+        durationLabel = '${h}h ${m}m';
+      } else {
+        durationLabel = '${m}m';
+      }
+    }
+
+    return InkWell(
+      onTap: () => EpisodeDetailSheet.show(context, widget.podcastItem, ep),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 10, 12, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Play/status indicator
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: isFinished
+                      ? Icon(Icons.check_circle_rounded, size: 18, color: cs.primary.withValues(alpha: 0.6))
+                      : progress > 0
+                          ? SizedBox(
+                              width: 18, height: 18,
+                              child: CircularProgressIndicator(
+                                value: progress,
+                                strokeWidth: 2.5,
+                                backgroundColor: cs.surfaceContainerHighest,
+                                color: cs.primary,
+                              ),
+                            )
+                          : Icon(Icons.circle_outlined, size: 18,
+                              color: cs.onSurfaceVariant.withValues(alpha: 0.3)),
+                ),
+                const SizedBox(width: 12),
+
+                // Title + metadata
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: isFinished
+                              ? cs.onSurfaceVariant.withValues(alpha: 0.5)
+                              : Colors.white,
+                        ),
+                        maxLines: 2, overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          if (dateLabel.isNotEmpty)
+                            Text(dateLabel,
+                              style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant.withValues(alpha: 0.6)),
+                            ),
+                          if (dateLabel.isNotEmpty && durationLabel.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 6),
+                              child: Text('·',
+                                style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+                              ),
+                            ),
+                          if (durationLabel.isNotEmpty)
+                            Text(durationLabel,
+                              style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant.withValues(alpha: 0.6)),
+                            ),
+                          ListenableBuilder(
+                            listenable: DownloadService(),
+                            builder: (_, __) {
+                              final downloaded = DownloadService().isDownloaded(dlKey);
+                              if (!downloaded) return const SizedBox.shrink();
+                              return Row(mainAxisSize: MainAxisSize.min, children: [
+                                const SizedBox(width: 6),
+                                Icon(Icons.download_done_rounded, size: 12, color: cs.primary.withValues(alpha: 0.6)),
+                              ]);
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Action buttons
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Download button (reactive)
+                    ListenableBuilder(
+                      listenable: DownloadService(),
+                      builder: (_, __) {
+                        final dl = DownloadService();
+                        final downloaded = dl.isDownloaded(dlKey);
+                        final downloading = dl.isDownloading(dlKey);
+                        final dlProgress = dl.downloadProgress(dlKey);
+
+                        if (downloaded) {
+                          return Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: Icon(Icons.download_done_rounded, size: 20,
+                              color: Colors.greenAccent.withValues(alpha: 0.7)),
+                          );
+                        }
+                        if (downloading) {
+                          return Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: SizedBox(width: 20, height: 20,
+                              child: Stack(alignment: Alignment.center, children: [
+                                CircularProgressIndicator(
+                                  value: dlProgress > 0 ? dlProgress : null,
+                                  strokeWidth: 2, color: cs.primary),
+                                Text('${(dlProgress * 100).toStringAsFixed(0)}',
+                                  style: TextStyle(fontSize: 7, color: cs.primary, fontWeight: FontWeight.w600)),
+                              ])),
+                          );
+                        }
+                        return IconButton(
+                          onPressed: widget.onDownload,
+                          icon: Icon(Icons.download_rounded, size: 20,
+                            color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
+                          visualDensity: VisualDensity.compact,
+                          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                        );
+                      },
+                    ),
+
+                    // Play button
+                    IconButton(
+                      onPressed: widget.onPlay,
+                      icon: Icon(
+                        progress > 0 && !isFinished
+                            ? Icons.play_circle_filled_rounded
+                            : Icons.play_circle_outline_rounded,
+                        size: 28,
+                        color: cs.primary,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+
+          ],
+        ),
+      ),
+    );
+  }
+}

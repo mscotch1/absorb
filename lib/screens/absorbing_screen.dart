@@ -1,0 +1,530 @@
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/library_provider.dart';
+import '../services/audio_player_service.dart';
+import '../services/download_service.dart';
+import '../widgets/absorb_page_header.dart';
+import '../widgets/absorbing_card.dart';
+
+class AbsorbingScreen extends StatefulWidget {
+  const AbsorbingScreen({super.key});
+
+  /// Global key for accessing the absorbing screen state
+  static final globalKey = GlobalKey<_AbsorbingScreenState>();
+
+  /// Scroll to the currently playing book card
+  static void scrollToActive() {
+    globalKey.currentState?._scrollToActiveCard();
+  }
+
+  @override
+  State<AbsorbingScreen> createState() => _AbsorbingScreenState();
+}
+
+class _AbsorbingScreenState extends State<AbsorbingScreen> {
+  final _player = AudioPlayerService();
+  final _pageController = PageController(viewportFraction: 0.92);
+
+  @override
+  void initState() {
+    super.initState();
+    _player.addListener(_rebuild);
+  }
+
+  @override
+  void dispose() {
+    _player.removeListener(_rebuild);
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  String? _lastPlayingId;
+  String? _lastPlayingEpisodeId;
+  String? _lastFinishedId;
+  bool _isSyncing = false;
+  // When true, _getAbsorbingBooks keeps the original list order (no move-to-front).
+  // Used during the slide-to-front animation so the user sees their book smoothly
+  // slide to the beginning rather than the list instantly reordering underneath them.
+  bool _suppressReorder = false;
+
+  void _rebuild() {
+    if (!mounted) return;
+    // Detect item or episode change (same show, different episode counts as a change)
+    final itemChanged = _player.currentItemId != _lastPlayingId;
+    final episodeChanged = _player.currentEpisodeId != _lastPlayingEpisodeId;
+    if (itemChanged || episodeChanged) {
+      final wasPlayingId = _lastPlayingId;
+      final wasEpisodeId = _lastPlayingEpisodeId;
+      _lastPlayingId = _player.currentItemId;
+      _lastPlayingEpisodeId = _player.currentEpisodeId;
+      if (_player.hasBook) {
+        // If this item was previously removed from Absorbing, un-block it now
+        // that the user has explicitly played it again.
+        final lib = context.read<LibraryProvider>();
+        final playingKey = _player.currentEpisodeId != null
+            ? '${_player.currentItemId!}-${_player.currentEpisodeId!}'
+            : _player.currentItemId!;
+        lib.unblockFromAbsorbing(playingKey);
+        // Suppress the list reorder if we're not already at page 0, so the
+        // animation slides the current view to the front instead of jumping.
+        final currentPage = _pageController.hasClients
+            ? (_pageController.page ?? 0).round()
+            : 0;
+        _suppressReorder = currentPage > 0;
+        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToActiveCard());
+      } else if (wasPlayingId != null && !_isSyncing) {
+        // Book/episode just stopped (natural completion or session end)
+        _suppressReorder = false;
+        // For podcast episodes, use compound key
+        final finishedKey = wasEpisodeId != null
+            ? '$wasPlayingId-$wasEpisodeId'
+            : wasPlayingId;
+        _lastFinishedId = finishedKey;
+        final lib = context.read<LibraryProvider>();
+        lib.markFinishedLocally(finishedKey);
+      }
+    }
+    setState(() {});
+  }
+
+  void _scrollToActiveCard({int retries = 2}) {
+    if (!_player.hasBook || !mounted) return;
+    final lib = context.read<LibraryProvider>();
+    final books = _getAbsorbingBooks(lib);
+    final playingKey = _player.currentEpisodeId != null
+        ? '${_player.currentItemId!}-${_player.currentEpisodeId!}'
+        : _player.currentItemId!;
+    final idx = books.indexWhere((b) => _absorbingKey(b) == playingKey);
+    if (idx >= 0 && _pageController.hasClients) {
+      if (_suppressReorder) {
+        // Animate from the current page to 0 while keeping the original list order.
+        // After the animation lands at 0, release suppression so the list properly
+        // reorders with the playing item at index 0.
+        _pageController
+            .animateToPage(0,
+                duration: const Duration(milliseconds: 400),
+                curve: Curves.easeInOutCubic)
+            .then((_) {
+          if (!mounted) return;
+          _suppressReorder = false;
+          setState(() {});
+        });
+      } else {
+        _pageController.animateToPage(idx,
+            duration: const Duration(milliseconds: 350),
+            curve: Curves.easeOutCubic);
+      }
+    } else if (retries > 0) {
+      // Book might not be in the list yet — retry after a rebuild
+      _suppressReorder = false;
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) _scrollToActiveCard(retries: retries - 1);
+      });
+    } else {
+      _suppressReorder = false;
+    }
+  }
+
+  Future<void> _stopAndRefresh(LibraryProvider lib) async {
+    if (_isSyncing) return;
+    setState(() => _isSyncing = true);
+    if (_player.hasBook) {
+      await _player.pause();
+      await _player.stop();
+    }
+    lib.refreshLocalProgress();
+    await lib.refresh();
+    if (mounted) setState(() => _isSyncing = false);
+  }
+
+  /// Pull-to-refresh: sync progress to/from server without stopping playback.
+  Future<void> _pullRefresh() async {
+    final lib = context.read<LibraryProvider>();
+    if (lib.isOffline) return;
+    await lib.refresh();
+  }
+
+  /// Derive the absorbing key for an item map: compound "itemId-episodeId" for
+  /// podcast episodes, plain "itemId" for books.
+  String _absorbingKey(Map<String, dynamic> item) {
+    // Explicit key stored by _updateAbsorbingCache
+    final explicit = item['_absorbingKey'] as String?;
+    if (explicit != null) return explicit;
+    final itemId = item['id'] as String? ?? '';
+    final re = item['recentEpisode'] as Map<String, dynamic>?;
+    final epId = re?['id'] as String?;
+    if (epId != null) return '$itemId-$epId';
+    return itemId;
+  }
+
+  List<Map<String, dynamic>> _getAbsorbingBooks(LibraryProvider lib) {
+    final removes = lib.manualAbsorbRemoves;
+    final cache = lib.absorbingItemCache;
+
+    // Quick lookup of fresh data — only from the in-progress sections.
+    // For podcast episodes, key by compound "itemId-episodeId".
+    const allowedSections = {'continue-listening', 'continue-series', 'downloaded-books'};
+    final sectionLookup = <String, Map<String, dynamic>>{};
+    for (final section in lib.personalizedSections) {
+      final sectionId = section['id'] as String? ?? '';
+      if (!allowedSections.contains(sectionId)) continue;
+      for (final e in (section['entities'] as List<dynamic>? ?? [])) {
+        if (e is Map<String, dynamic>) {
+          final itemId = e['id'] as String?;
+          if (itemId == null) continue;
+          final re = e['recentEpisode'] as Map<String, dynamic>?;
+          final epId = re?['id'] as String?;
+          final key = epId != null ? '$itemId-$epId' : itemId;
+          sectionLookup[key] = e;
+        }
+      }
+    }
+
+    // Build list from the persisted local absorbing set.
+    // Books stay here even after the server removes them from continue-listening.
+    // absorbingBookIds now contains compound keys for podcast episodes.
+    final selectedLibraryId = lib.selectedLibraryId;
+    final items = <Map<String, dynamic>>[];
+    for (final key in lib.absorbingBookIds) {
+      if (removes.contains(key)) continue;
+      // Prefer fresh data from current library's sections
+      final fromSection = sectionLookup[key];
+      if (fromSection != null) {
+        items.add(fromSection);
+        continue;
+      }
+      // Cache fallback — only include if it matches the current library
+      final cached = cache[key];
+      if (cached != null) {
+        final itemLibId = cached['libraryId'] as String?;
+        if (selectedLibraryId == null || itemLibId == null || itemLibId == selectedLibraryId) {
+          items.add(cached);
+        }
+      }
+    }
+
+    // If the currently playing item isn't in the list, add it at the front.
+    // For podcast episodes, match by compound key.
+    // Skip if the playing item belongs to a different library type.
+    final isPod = lib.isPodcastLibrary;
+    if (_player.hasBook && _player.currentItemId != null) {
+      final playingId = _player.currentItemId!;
+      final playingEpId = _player.currentEpisodeId;
+      final playingIsPodcast = playingEpId != null;
+      // Only show if the playing item matches the current library type
+      if (playingIsPodcast == isPod) {
+        final playingKey = playingEpId != null ? '$playingId-$playingEpId' : playingId;
+
+        final existingIdx = items.indexWhere((b) => _absorbingKey(b) == playingKey);
+        if (!_suppressReorder && existingIdx > 0) {
+          final item = items.removeAt(existingIdx);
+          items.insert(0, item);
+        } else if (existingIdx < 0) {
+          // Synthesize entry for the currently playing item
+          final entry = <String, dynamic>{
+            'id': playingId,
+            'media': {
+              'metadata': {
+                'title': _player.currentTitle,
+                'authorName': _player.currentAuthor,
+              },
+              'duration': _player.totalDuration,
+              'chapters': _player.chapters,
+            },
+          };
+          if (playingEpId != null) {
+            entry['recentEpisode'] = {
+              'id': playingEpId,
+              'title': _player.currentEpisodeTitle ?? _player.currentTitle,
+              'duration': _player.totalDuration,
+            };
+            entry['_absorbingKey'] = playingKey;
+          }
+          items.insert(0, entry);
+        }
+      }
+    }
+
+    // When nothing is playing, keep the last-finished item at the front
+    // Only if it matches the current library type
+    if (!_player.hasBook && _lastFinishedId != null && !removes.contains(_lastFinishedId)) {
+      final finishedIsPodcast = _lastFinishedId!.contains('-');
+      if (finishedIsPodcast == isPod) {
+        final finishedIdx = items.indexWhere((b) => _absorbingKey(b) == _lastFinishedId);
+        if (finishedIdx > 0) {
+          final item = items.removeAt(finishedIdx);
+          items.insert(0, item);
+        }
+      }
+    }
+
+    return items;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final lib = context.watch<LibraryProvider>();
+    final dl = DownloadService();
+    var books = _getAbsorbingBooks(lib);
+    
+    // Force offline mode when actually offline
+    final effectiveOffline = lib.isOffline;
+    if (effectiveOffline) {
+      books = books.where((b) => dl.isDownloaded(b['id'] as String? ?? '')).toList();
+    }
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // ── Header ──
+            AbsorbPageHeader(
+              title: 'Absorbing',
+              brandingColor: Colors.white38,
+              titleColor: Colors.white,
+              padding: const EdgeInsets.fromLTRB(20, 12, 12, 0),
+              actions: [
+                // Offline mode toggle
+                GestureDetector(
+                  onTap: () {
+                    final newVal = !lib.isManualOffline;
+                    lib.setManualOffline(newVal);
+                    if (newVal) _stopAndRefresh(lib);
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOutCubic,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: effectiveOffline ? Colors.orange.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: effectiveOffline ? Colors.orange.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.08)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          effectiveOffline ? Icons.airplanemode_active_rounded : Icons.airplanemode_inactive_rounded,
+                          size: 14, color: effectiveOffline ? Colors.orange : Colors.white38,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          effectiveOffline ? 'Offline' : 'Online',
+                          style: TextStyle(
+                            color: effectiveOffline ? Colors.orange : Colors.white38,
+                            fontSize: 11, fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Unified button: "Sync" when idle, "Stop & Sync" when playing
+                if (!effectiveOffline)
+                  GestureDetector(
+                    onTap: _isSyncing ? null : () {
+                      if (_player.hasBook) {
+                        _stopAndRefresh(lib);
+                      } else {
+                        () async {
+                          setState(() => _isSyncing = true);
+                          await _pullRefresh();
+                          if (mounted) setState(() => _isSyncing = false);
+                        }();
+                      }
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (_isSyncing) ...[
+                            const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white38)),
+                            const SizedBox(width: 6),
+                            const Text('Syncing…', style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.w500)),
+                          ] else if (_player.hasBook) ...[
+                            const Icon(Icons.stop_rounded, size: 14, color: Colors.white38),
+                            const SizedBox(width: 4),
+                            const Text('Stop & Sync', style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.w500)),
+                          ] else ...[
+                            const Icon(Icons.sync_rounded, size: 14, color: Colors.white38),
+                            const SizedBox(width: 4),
+                            const Text('Sync', style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.w500)),
+                          ],
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  // Offline: just stop button (no sync)
+                  AnimatedOpacity(
+                    opacity: _player.hasBook ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 300),
+                    child: IgnorePointer(
+                      ignoring: !_player.hasBook,
+                      child: GestureDetector(
+                        onTap: () => _stopAndRefresh(lib),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.06),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.stop_rounded, size: 14, color: Colors.white38),
+                              SizedBox(width: 4),
+                              Text('Stop', style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.w500)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            // ── Page Dots ──
+            if (books.length > 1)
+              Padding(
+                padding: const EdgeInsets.only(top: 8, bottom: 4),
+                child: _PageDots(count: books.length, controller: _pageController),
+              ),
+            // ── Cards (refreshable) ──
+            Expanded(
+              child: lib.isLoading
+                  ? const Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white24))
+                  : books.isEmpty
+                      ? _emptyState(cs, tt, effectiveOffline)
+                      : PageView.builder(
+                          controller: _pageController,
+                          scrollDirection: Axis.horizontal,
+                          clipBehavior: Clip.none,
+                          physics: const PageScrollPhysics(parent: ClampingScrollPhysics()),
+                          itemCount: books.length,
+                          itemBuilder: (_, i) => LayoutBuilder(
+                            builder: (context, constraints) {
+                              final cardWidth = constraints.maxWidth;
+                              final vPad = (constraints.maxHeight * 0.04).clamp(12.0, 40.0);
+                              return AnimatedBuilder(
+                                animation: _pageController,
+                                builder: (context, child) {
+                                  double distFromCenter = 0.0;
+                                  double rawDist = 0.0;
+                                  if (_pageController.position.haveDimensions) {
+                                    final page = _pageController.page ?? _pageController.initialPage.toDouble();
+                                    rawDist = page - i; // negative = card is to the right
+                                    distFromCenter = rawDist.abs();
+                                  }
+                                  final double scaleX;
+                                  if (distFromCenter >= 1.0) {
+                                    scaleX = 0.85;
+                                  } else {
+                                    // Use easeOut curve for smoother transition
+                                    final t = Curves.easeOut.transform(1.0 - distFromCenter);
+                                    scaleX = 0.85 + (t * 0.15); // 0.85 → 1.0
+                                  }
+                                  // Calculate how much space the squeeze frees up, then translate toward center
+                                  final squeezedWidth = cardWidth * scaleX;
+                                  final freedSpace = cardWidth - squeezedWidth;
+                                  // Pull card toward center by half the freed space
+                                  final direction = rawDist > 0 ? 1.0 : (rawDist < 0 ? -1.0 : 0.0);
+                                  final translateX = direction * freedSpace * 0.45;
+
+                                  return Transform(
+                                    alignment: Alignment.center,
+                                    transform: Matrix4.identity()
+                                      ..translate(translateX, 0.0, 0.0)
+                                      ..scale(scaleX, 1.0, 1.0),
+                                    child: Padding(
+                                      padding: EdgeInsets.symmetric(horizontal: 4, vertical: vPad),
+                                      child: child,
+                                    ),
+                                  );
+                                },
+                                child: RepaintBoundary(child: AbsorbingCard(key: ValueKey(_absorbingKey(books[i])), item: books[i], player: _player)),
+                              );
+                            },
+                          ),
+                        ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _emptyState(ColorScheme cs, TextTheme tt, bool isOffline) {
+    final lib = context.read<LibraryProvider>();
+    final isPod = lib.isPodcastLibrary;
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(isOffline ? Icons.cloud_off_rounded
+              : isPod ? Icons.podcasts_rounded : Icons.headphones_rounded,
+            size: 64, color: Colors.white.withValues(alpha: 0.15)),
+          const SizedBox(height: 16),
+          Text(isOffline
+              ? (isPod ? 'No downloaded episodes' : 'No downloaded books')
+              : (isPod ? 'Nothing playing yet' : 'Nothing absorbing yet'),
+            style: tt.titleMedium?.copyWith(color: Colors.white38)),
+          const SizedBox(height: 8),
+          Text(isOffline
+              ? (isPod ? 'Download episodes to listen offline' : 'Download books to listen offline')
+              : (isPod ? 'Start an episode from the Shows tab' : 'Start a book from the Library tab'),
+            style: tt.bodySmall?.copyWith(color: Colors.white24)),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── PAGE DOTS ──────────────────────────────────────────────
+
+class _PageDots extends StatelessWidget {
+  final int count;
+  final PageController controller;
+  const _PageDots({required this.count, required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (_, __) {
+        final page = controller.hasClients ? (controller.page ?? 0).round() : 0;
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(count, (i) {
+            final active = i == page;
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOutCubic,
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              width: active ? 20 : 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: active ? Colors.white54 : Colors.white.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(3),
+              ),
+            );
+          }),
+        );
+      },
+    );
+  }
+}
