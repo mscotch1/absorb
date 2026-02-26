@@ -25,6 +25,7 @@ class CardWideButton extends StatelessWidget {
   final Color accent;
   final bool isActive;
   final bool alwaysEnabled;
+  final bool large;
   final VoidCallback? onTap;
   final Widget? child; // if provided, renders child instead (for stateful buttons)
 
@@ -32,7 +33,7 @@ class CardWideButton extends StatelessWidget {
     super.key,
     required this.icon, required this.label,
     required this.accent, required this.isActive,
-    this.alwaysEnabled = false,
+    this.alwaysEnabled = false, this.large = false,
     this.onTap, this.child,
   });
 
@@ -43,20 +44,20 @@ class CardWideButton extends StatelessWidget {
     return GestureDetector(
       onTap: enabled ? onTap : () => showInactiveToast(context),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
+        padding: EdgeInsets.symmetric(vertical: large ? 14 : 10),
         decoration: BoxDecoration(
           color: cs.onSurface.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(large ? 14 : 12),
           border: Border.all(color: cs.onSurface.withValues(alpha: 0.08)),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 15, color: enabled ? cs.onSurfaceVariant : cs.onSurface.withValues(alpha: 0.24)),
+            Icon(icon, size: large ? 18 : 15, color: enabled ? cs.onSurfaceVariant : cs.onSurface.withValues(alpha: 0.24)),
             const SizedBox(width: 6),
             Text(label, style: TextStyle(
               color: enabled ? cs.onSurfaceVariant : cs.onSurface.withValues(alpha: 0.24),
-              fontSize: 11, fontWeight: FontWeight.w500)),
+              fontSize: large ? 13 : 11, fontWeight: FontWeight.w500)),
           ],
         ),
       ),
@@ -109,7 +110,8 @@ class MoreMenuItem extends StatelessWidget {
 class CardSleepButtonInline extends StatelessWidget {
   final Color accent;
   final bool isActive;
-  const CardSleepButtonInline({super.key, required this.accent, required this.isActive});
+  final bool large;
+  const CardSleepButtonInline({super.key, required this.accent, required this.isActive, this.large = false});
 
   @override Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -138,11 +140,11 @@ class CardSleepButtonInline extends StatelessWidget {
             showSleepTimerSheet(context, accent);
           } : () => showInactiveToast(context),
           child: Container(
-            height: 36,
+            height: large ? 48 : 36,
             clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
               color: active ? accent.withValues(alpha: 0.1) : cs.onSurface.withValues(alpha: 0.06),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(large ? 16 : 14),
               border: Border.all(color: active ? accent.withValues(alpha: 0.3) : cs.onSurface.withValues(alpha: 0.08)),
             ),
             child: Stack(children: [
@@ -152,19 +154,19 @@ class CardSleepButtonInline extends StatelessWidget {
                   child: Container(
                     decoration: BoxDecoration(
                       color: accent.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(13),
+                      borderRadius: BorderRadius.circular(large ? 15 : 13),
                     ),
                   ),
                 ),
               Center(child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.bedtime_outlined, size: 16,
+                  Icon(Icons.bedtime_outlined, size: large ? 20 : 16,
                     color: active ? accent : (isActive ? cs.onSurfaceVariant : cs.onSurface.withValues(alpha: 0.24))),
                   const SizedBox(width: 8),
                   Text(label, style: TextStyle(
                     color: active ? accent : (isActive ? cs.onSurfaceVariant : cs.onSurface.withValues(alpha: 0.24)),
-                    fontSize: active && isTime ? 13 : 12,
+                    fontSize: large ? (active && isTime ? 15 : 14) : (active && isTime ? 13 : 12),
                     fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                     fontFeatures: active && isTime ? const [FontFeature.tabularFigures()] : null,
                   )),
@@ -184,7 +186,8 @@ class CardBookmarkButtonInline extends StatefulWidget {
   final Color accent;
   final bool isActive;
   final String itemId;
-  const CardBookmarkButtonInline({super.key, required this.player, required this.accent, required this.isActive, required this.itemId});
+  final bool large;
+  const CardBookmarkButtonInline({super.key, required this.player, required this.accent, required this.isActive, required this.itemId, this.large = false});
   @override State<CardBookmarkButtonInline> createState() => _CardBookmarkButtonInlineState();
 }
 
@@ -198,25 +201,26 @@ class _CardBookmarkButtonInlineState extends State<CardBookmarkButtonInline> {
 
   @override Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final lg = widget.large;
     return GestureDetector(
       onTap: widget.isActive ? () => _showBookmarks(context) : () => showInactiveToast(context),
       onLongPress: widget.isActive ? () => _quickAdd(context) : null,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: EdgeInsets.symmetric(vertical: lg ? 12 : 8),
         decoration: BoxDecoration(
           color: cs.onSurface.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(lg ? 14 : 12),
           border: Border.all(color: cs.onSurface.withValues(alpha: 0.08)),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.bookmark_outline_rounded, size: 18,
+            Icon(Icons.bookmark_outline_rounded, size: lg ? 22 : 18,
               color: widget.isActive ? cs.onSurfaceVariant : cs.onSurface.withValues(alpha: 0.24)),
             const SizedBox(width: 8),
             Text(_count > 0 ? 'Bookmarks ($_count)' : 'Bookmark', style: TextStyle(
               color: widget.isActive ? cs.onSurfaceVariant : cs.onSurface.withValues(alpha: 0.24),
-              fontSize: 12, fontWeight: FontWeight.w500)),
+              fontSize: lg ? 14 : 12, fontWeight: FontWeight.w500)),
           ],
         ),
       ),
@@ -256,7 +260,8 @@ class CardSpeedButtonInline extends StatelessWidget {
   final AudioPlayerService player;
   final Color accent;
   final bool isActive;
-  const CardSpeedButtonInline({super.key, required this.player, required this.accent, required this.isActive});
+  final bool large;
+  const CardSpeedButtonInline({super.key, required this.player, required this.accent, required this.isActive, this.large = false});
 
   @override Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -267,21 +272,21 @@ class CardSpeedButtonInline extends StatelessWidget {
           builder: (ctx) => CardSpeedSheet(player: player, accent: accent));
       } : () => showInactiveToast(context),
       child: Container(
-        height: 36,
+        height: large ? 48 : 36,
         decoration: BoxDecoration(
           color: cs.onSurface.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(large ? 16 : 14),
           border: Border.all(color: cs.onSurface.withValues(alpha: 0.08)),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.speed_rounded, size: 16,
+            Icon(Icons.speed_rounded, size: large ? 20 : 16,
               color: isActive ? accent : cs.onSurface.withValues(alpha: 0.24)),
             const SizedBox(width: 8),
             Text('${player.speed.toStringAsFixed(2)}x', style: TextStyle(
               color: isActive ? accent : cs.onSurface.withValues(alpha: 0.24),
-              fontSize: 13, fontWeight: FontWeight.w700)),
+              fontSize: large ? 15 : 13, fontWeight: FontWeight.w700)),
           ],
         ),
       ),

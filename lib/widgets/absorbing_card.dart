@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../providers/auth_provider.dart';
 import '../providers/library_provider.dart';
+import '../screens/app_shell.dart';
 import '../services/audio_player_service.dart';
 import '../services/download_service.dart';
 import '../services/playback_history_service.dart';
@@ -19,6 +20,7 @@ import 'card_buttons.dart';
 import 'chromecast_button.dart';
 import '../services/chromecast_service.dart';
 import '../services/progress_sync_service.dart';
+import 'expanded_card.dart';
 
 class AbsorbingCard extends StatefulWidget {
   final Map<String, dynamic> item;
@@ -348,7 +350,6 @@ class AbsorbingCardState extends State<AbsorbingCard> with AutomaticKeepAliveCli
               Padding(
                 padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text('${(bookProgress * 100).clamp(0, 100).toStringAsFixed(1)}%',
                       style: tt.labelMedium?.copyWith(
@@ -356,6 +357,7 @@ class AbsorbingCardState extends State<AbsorbingCard> with AutomaticKeepAliveCli
                         fontWeight: FontWeight.w800, fontSize: 15,
                         shadows: [Shadow(color: isDark ? Colors.black.withValues(alpha: 0.6) : Colors.white.withValues(alpha: 0.6), blurRadius: 4)],
                       )),
+                    const Spacer(),
                     if (totalChapters > 0 && !_isPodcastEpisode)
                       Text('Ch ${(chapterIdx + 1).clamp(1, totalChapters)} / $totalChapters',
                         style: tt.labelMedium?.copyWith(
@@ -388,7 +390,9 @@ class AbsorbingCardState extends State<AbsorbingCard> with AutomaticKeepAliveCli
                       final isDownloaded = DownloadService().isDownloaded(_itemId);
                       final castService = ChromecastService();
                       final isCastingThis = castService.isCasting && castService.castingItemId == _itemId;
-                      return Container(
+                      return GestureDetector(
+                        onTap: _isActive && !isFinished ? () => _expandCard(context) : null,
+                        child: Container(
                           width: coverSize,
                           height: coverSize,
                           decoration: BoxDecoration(
@@ -527,6 +531,7 @@ class AbsorbingCardState extends State<AbsorbingCard> with AutomaticKeepAliveCli
                             ),
                           ),
                         ),
+                      ),
                       );
                     },
                   ),
@@ -672,6 +677,21 @@ class AbsorbingCardState extends State<AbsorbingCard> with AutomaticKeepAliveCli
       color: cs2.onSurface.withValues(alpha: 0.05),
       child: Center(child: Icon(Icons.headphones_rounded, size: 48, color: cs2.onSurface.withValues(alpha: 0.15))),
     );
+  }
+
+  void _expandCard(BuildContext context) {
+    AppShell.setExpandedOpen(true);
+    Navigator.of(context, rootNavigator: true).push(
+      ExpandedCardRoute(
+        child: ExpandedCard(
+          item: widget.item,
+          player: widget.player,
+          initialCoverScheme: _coverScheme,
+          initialBlurredCover: _blurredCover,
+          initialChapters: _fetchedChapters,
+        ),
+      ),
+    ).then((_) => AppShell.setExpandedOpen(false));
   }
 
   Future<void> _startPlayback() async {

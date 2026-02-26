@@ -1,0 +1,1160 @@
+import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import '../providers/auth_provider.dart';
+import '../providers/library_provider.dart';
+import '../services/audio_player_service.dart';
+import '../services/download_service.dart';
+import '../services/playback_history_service.dart';
+import '../services/chromecast_service.dart';
+import '../services/progress_sync_service.dart';
+import 'book_detail_sheet.dart';
+import 'episode_list_sheet.dart';
+import 'equalizer_sheet.dart';
+import 'card_progress_bar.dart';
+import 'card_playback_controls.dart';
+import 'card_buttons.dart';
+import 'chromecast_button.dart';
+
+// ─── Custom route: slide-up + fade ────────────────────────────
+
+class ExpandedCardRoute extends PageRoute<void> {
+  final Widget child;
+  ExpandedCardRoute({required this.child});
+
+  @override Color? get barrierColor => null;
+  @override String? get barrierLabel => null;
+  @override bool get maintainState => true;
+  @override bool get opaque => true;
+
+  @override
+  Duration get transitionDuration => const Duration(milliseconds: 350);
+  @override
+  Duration get reverseTransitionDuration => const Duration(milliseconds: 300);
+
+  @override
+  Widget buildPage(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation) => child;
+
+  @override
+  Widget buildTransitions(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation, Widget child) {
+    final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic);
+    return SlideTransition(
+      position: Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero).animate(curved),
+      child: FadeTransition(opacity: curved, child: child),
+    );
+  }
+}
+
+// ─── Expanded card widget ─────────────────────────────────────
+
+class ExpandedCard extends StatefulWidget {
+  final Map<String, dynamic> item;
+  final AudioPlayerService player;
+  final ColorScheme? initialCoverScheme;
+  final ui.Image? initialBlurredCover;
+  final List<dynamic>? initialChapters;
+
+  const ExpandedCard({
+    super.key,
+    required this.item,
+    required this.player,
+    this.initialCoverScheme,
+    this.initialBlurredCover,
+    this.initialChapters,
+  });
+
+  @override
+  State<ExpandedCard> createState() => _ExpandedCardState();
+}
+
+class _ExpandedCardState extends State<ExpandedCard> {
+  ColorScheme? _coverScheme;
+  ui.Image? _blurredCover;
+  List<dynamic>? _fetchedChapters;
+  bool _isStarting = false;
+  StreamSubscription<Duration>? _chapterTrackSub;
+  int _lastChapterIdx = -1;
+
+  // Track current item for detecting changes
+  late String? _currentItemId;
+  late String? _currentEpisodeId;
+  bool _wasPlaying = false;
+  bool _isPopping = false; // Prevent double-pop and setState during exit
+
+  // Our own route, captured for popUntil when modals are stacked above us
+  Route<dynamic>? _ownRoute;
+
+  // Swipe-down-to-dismiss
+  double _dragOffset = 0;
+
+  // Current item data (may change if a new book starts)
+  late Map<String, dynamic> _item;
+
+  String get _itemId => _item['id'] as String? ?? '';
+  Map<String, dynamic> get _media => _item['media'] as Map<String, dynamic>? ?? {};
+  Map<String, dynamic> get _metadata => _media['metadata'] as Map<String, dynamic>? ?? {};
+  String get _title => _metadata['title'] as String? ?? 'Unknown';
+  String get _author => _metadata['authorName'] as String? ?? '';
+  double get _duration => (_media['duration'] as num?)?.toDouble() ?? 0;
+  List<dynamic> get _chapters {
+    if (_fetchedChapters != null && _fetchedChapters!.isNotEmpty) return _fetchedChapters!;
+    return _media['chapters'] as List<dynamic>? ?? [];
+  }
+  bool get _isActive {
+    if (widget.player.currentItemId != _itemId) return false;
+    if (_episodeId != null && widget.player.currentEpisodeId != null) {
+      return _episodeId == widget.player.currentEpisodeId;
+    }
+    return true;
+  }
+  bool get _isPodcastEpisode => _isActive && widget.player.currentEpisodeId != null;
+
+  Map<String, dynamic>? get _recentEpisode => _item['recentEpisode'] as Map<String, dynamic>?;
+  String? get _episodeId => _recentEpisode?['id'] as String?;
+  double get _effectiveDuration {
+    if (!_isActive && _recentEpisode != null) {
+      final epDur = (_recentEpisode!['duration'] as num?)?.toDouble();
+      if (epDur != null && epDur > 0) return epDur;
+      final audioFile = _recentEpisode!['audioFile'] as Map<String, dynamic>?;
+      final afDur = (audioFile?['duration'] as num?)?.toDouble();
+      if (afDur != null && afDur > 0) return afDur;
+    }
+    return _duration;
+  }
+
+  String? get _coverUrl {
+    final lib = context.read<LibraryProvider>();
+    return lib.getCoverUrl(_itemId, width: 800);
+  }
+  bool get _isLocalCover => _coverUrl != null && _coverUrl!.startsWith('/');
+
+  @override
+  void initState() {
+    super.initState();
+    _item = widget.item;
+    _coverScheme = widget.initialCoverScheme;
+    _fetchedChapters = widget.initialChapters;
+    _currentItemId = widget.player.currentItemId;
+    _currentEpisodeId = widget.player.currentEpisodeId;
+    _wasPlaying = widget.player.hasBook;
+    widget.player.addListener(_onPlayerChanged);
+    _startChapterTracking();
+    _fetchChaptersIfNeeded();
+    // Generate our own blurred cover
+    _generateBlur();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _ownRoute ??= ModalRoute.of(context);
+  }
+
+  @override
+  void dispose() {
+    if (!_isPopping) {
+      widget.player.removeListener(_onPlayerChanged);
+      _chapterTrackSub?.cancel();
+    }
+    _blurredCover?.dispose();
+    super.dispose();
+  }
+
+  void _onPlayerChanged() {
+    if (!mounted || _isPopping) return;
+
+    // Detect book finished: was playing, now hasBook is false
+    if (_wasPlaying && !widget.player.hasBook) {
+      _dismissExpanded();
+      return;
+    }
+
+    // Detect item change: new book started
+    final newItemId = widget.player.currentItemId;
+    final newEpisodeId = widget.player.currentEpisodeId;
+    if (newItemId != null && (newItemId != _currentItemId || newEpisodeId != _currentEpisodeId)) {
+      _handleItemChange(newItemId, newEpisodeId);
+    }
+
+    _wasPlaying = widget.player.hasBook;
+    _currentItemId = newItemId;
+    _currentEpisodeId = newEpisodeId;
+    setState(() {});
+  }
+
+  void _dismissExpanded() {
+    if (_isPopping) return;
+    _isPopping = true;
+    // Remove listener immediately to prevent further callbacks during pop animation
+    widget.player.removeListener(_onPlayerChanged);
+    _chapterTrackSub?.cancel();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final nav = Navigator.of(context, rootNavigator: true);
+      // Pop all routes above us (e.g. open modals/sheets) plus our own route
+      if (_ownRoute != null) {
+        nav.popUntil((route) => route == _ownRoute);
+        nav.pop();
+      } else {
+        nav.pop();
+      }
+    });
+  }
+
+  void _handleItemChange(String newItemId, String? newEpisodeId) {
+    // Try to find the new item data from the library provider
+    final lib = context.read<LibraryProvider>();
+    Map<String, dynamic>? newItem;
+
+    // Search personalized sections for the new item
+    for (final section in lib.personalizedSections) {
+      for (final e in (section['entities'] as List<dynamic>? ?? [])) {
+        if (e is Map<String, dynamic> && e['id'] == newItemId) {
+          newItem = e;
+          break;
+        }
+      }
+      if (newItem != null) break;
+    }
+
+    // Fallback: synthesize from player data
+    newItem ??= {
+      'id': newItemId,
+      'media': {
+        'metadata': {
+          'title': widget.player.currentTitle ?? 'Unknown',
+          'authorName': widget.player.currentAuthor ?? '',
+        },
+        'duration': widget.player.totalDuration,
+        'chapters': widget.player.chapters,
+      },
+    };
+    if (newEpisodeId != null) {
+      newItem['recentEpisode'] = {
+        'id': newEpisodeId,
+        'title': widget.player.currentEpisodeTitle ?? widget.player.currentTitle,
+        'duration': widget.player.totalDuration,
+      };
+    }
+
+    setState(() {
+      _item = newItem!;
+      _coverScheme = null;
+      _fetchedChapters = null;
+      _lastChapterIdx = -1;
+    });
+
+    // Dispose old blur and regenerate
+    _blurredCover?.dispose();
+    _blurredCover = null;
+    _generateBlur();
+    _fetchChaptersIfNeeded();
+    _startChapterTracking();
+  }
+
+  void _startChapterTracking() {
+    _chapterTrackSub?.cancel();
+    _chapterTrackSub = widget.player.absolutePositionStream.listen((pos) {
+      if (!_isActive) return;
+      final posS = pos.inMilliseconds / 1000.0;
+      final chapters = widget.player.chapters.isNotEmpty ? widget.player.chapters : _chapters;
+      if (chapters.isEmpty) {
+        final sec = pos.inSeconds;
+        if (sec != _lastChapterIdx) {
+          _lastChapterIdx = sec;
+          if (mounted) setState(() {});
+        }
+        return;
+      }
+      int idx = 0;
+      for (int i = 0; i < chapters.length; i++) {
+        final ch = chapters[i] as Map<String, dynamic>;
+        final start = (ch['start'] as num?)?.toDouble() ?? 0;
+        final end = (ch['end'] as num?)?.toDouble() ?? 0;
+        if (posS >= start && posS < end) { idx = i; break; }
+      }
+      if (idx != _lastChapterIdx) {
+        _lastChapterIdx = idx;
+        if (mounted) setState(() {});
+      }
+    });
+  }
+
+  Future<void> _fetchChaptersIfNeeded() async {
+    final inline = _media['chapters'] as List<dynamic>? ?? [];
+    if (inline.isNotEmpty) return;
+    final auth = context.read<AuthProvider>();
+    final api = auth.apiService;
+    if (api == null) return;
+    try {
+      final fullItem = await api.getLibraryItem(_itemId);
+      if (fullItem != null && mounted) {
+        final media = fullItem['media'] as Map<String, dynamic>? ?? {};
+        final chapters = media['chapters'] as List<dynamic>? ?? [];
+        if (chapters.isNotEmpty) {
+          setState(() => _fetchedChapters = chapters);
+          if (_isActive && widget.player.chapters.isEmpty) {
+            widget.player.updateChapters(chapters);
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  void _onCoverLoaded(ImageProvider provider) {
+    if (_coverScheme != null) return;
+    ColorScheme.fromImageProvider(provider: provider, brightness: Theme.of(context).brightness)
+        .then((s) {
+          if (mounted) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) setState(() => _coverScheme = s);
+            });
+          }
+        })
+        .catchError((_) {});
+  }
+
+  /// Generate our own blurred cover from the current cover URL.
+  Future<void> _generateBlur() async {
+    final url = _coverUrl;
+    if (url == null) return;
+
+    try {
+      final ImageProvider provider;
+      if (url.startsWith('/')) {
+        provider = FileImage(File(url));
+      } else {
+        final lib = context.read<LibraryProvider>();
+        provider = CachedNetworkImageProvider(url, headers: lib.mediaHeaders);
+      }
+
+      final completer = Completer<ui.Image>();
+      final stream = provider.resolve(ImageConfiguration.empty);
+      late ImageStreamListener listener;
+      listener = ImageStreamListener((info, _) {
+        completer.complete(info.image);
+        stream.removeListener(listener);
+      }, onError: (e, _) {
+        if (!completer.isCompleted) completer.completeError(e);
+        stream.removeListener(listener);
+      });
+      stream.addListener(listener);
+
+      final srcImage = await completer.future;
+      const targetWidth = 200;
+      final aspect = srcImage.height / srcImage.width;
+      final targetHeight = (targetWidth * aspect).round();
+
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, targetWidth.toDouble(), targetHeight.toDouble()));
+      final paint = Paint()
+        ..imageFilter = ui.ImageFilter.blur(sigmaX: 30, sigmaY: 30, tileMode: TileMode.decal);
+      canvas.drawImageRect(
+        srcImage,
+        Rect.fromLTWH(0, 0, srcImage.width.toDouble(), srcImage.height.toDouble()),
+        Rect.fromLTWH(0, 0, targetWidth.toDouble(), targetHeight.toDouble()),
+        paint,
+      );
+      final picture = recorder.endRecording();
+      final blurred = await picture.toImage(targetWidth, targetHeight);
+      picture.dispose();
+
+      if (mounted) {
+        setState(() => _blurredCover = blurred);
+      } else {
+        blurred.dispose();
+      }
+
+      // Also derive cover scheme if needed
+      if (_coverScheme == null) _onCoverLoaded(provider);
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
+    final cs = _coverScheme ?? Theme.of(context).colorScheme;
+    final accent = cs.primary;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final lib = context.watch<LibraryProvider>();
+    final mediaHeaders = lib.mediaHeaders;
+    final progress = (_episodeId != null)
+        ? lib.getEpisodeProgress(_itemId, _episodeId!)
+        : (_isPodcastEpisode
+            ? lib.getEpisodeProgress(_itemId, widget.player.currentEpisodeId!)
+            : lib.getProgress(_itemId));
+    final bool isFinished;
+    if (_episodeId != null) {
+      isFinished = lib.getEpisodeProgressData(_itemId, _episodeId!)?['isFinished'] == true;
+    } else if (_isPodcastEpisode) {
+      isFinished = lib.getEpisodeProgressData(_itemId, widget.player.currentEpisodeId!)?['isFinished'] == true;
+    } else {
+      isFinished = lib.getProgressData(_itemId)?['isFinished'] == true;
+    }
+    final chapterIdx = _currentChapterIndex();
+    final totalChapters = _isActive ? widget.player.chapters.length : _chapters.length;
+    final double bookProgress;
+    if (_isActive && widget.player.totalDuration > 0) {
+      final playerPos = widget.player.position.inMilliseconds / 1000.0;
+      if (playerPos < 1.0 && progress > 0.01) {
+        bookProgress = progress;
+      } else {
+        bookProgress = (playerPos / widget.player.totalDuration).clamp(0.0, 1.0);
+      }
+    } else {
+      bookProgress = progress;
+    }
+
+    return Scaffold(
+      backgroundColor: cs.surface,
+      body: GestureDetector(
+        onVerticalDragUpdate: (details) {
+          final newOffset = _dragOffset + details.delta.dy;
+          if (newOffset < 0) return; // only allow downward
+          setState(() => _dragOffset = newOffset);
+        },
+        onVerticalDragEnd: (details) {
+          if (_dragOffset > 100 || details.velocity.pixelsPerSecond.dy > 500) {
+            _dismissExpanded();
+          } else {
+            setState(() => _dragOffset = 0);
+          }
+        },
+        child: Transform.translate(
+          offset: Offset(0, _dragOffset),
+          child: Opacity(
+            opacity: (1.0 - (_dragOffset / 400)).clamp(0.5, 1.0),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // Layer 1: Blurred cover background
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 600),
+                  child: _buildBackground(isDark, mediaHeaders),
+                ),
+                // Layer 2: Scrim
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: isDark
+                          ? [
+                              Colors.black.withValues(alpha: 0.3),
+                              Colors.black.withValues(alpha: 0.6),
+                              Colors.black.withValues(alpha: 0.85),
+                            ]
+                          : [
+                              Colors.white.withValues(alpha: 0.4),
+                              Colors.white.withValues(alpha: 0.7),
+                              Colors.white.withValues(alpha: 0.9),
+                            ],
+                      ),
+                    ),
+                  ),
+                ),
+                // Layer 3: Content
+                SafeArea(
+                  child: Column(
+                    children: [
+                      // ── Stats row ──
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+                        child: Row(
+                          children: [
+                            Text('${(bookProgress * 100).clamp(0, 100).toStringAsFixed(1)}%',
+                              style: tt.labelMedium?.copyWith(
+                                color: isDark ? Colors.white.withValues(alpha: 0.95) : Colors.black.withValues(alpha: 0.85),
+                                fontWeight: FontWeight.w800, fontSize: 16,
+                                shadows: [Shadow(color: isDark ? Colors.black.withValues(alpha: 0.6) : Colors.white.withValues(alpha: 0.6), blurRadius: 4)],
+                              )),
+                            const Spacer(),
+                            if (totalChapters > 0 && !_isPodcastEpisode)
+                              Text('Ch ${(chapterIdx + 1).clamp(1, totalChapters)} / $totalChapters',
+                                style: tt.labelMedium?.copyWith(
+                                  color: isDark ? Colors.white.withValues(alpha: 0.85) : Colors.black.withValues(alpha: 0.75),
+                                  fontWeight: FontWeight.w700, fontSize: 15,
+                                  shadows: [Shadow(color: isDark ? Colors.black.withValues(alpha: 0.6) : Colors.white.withValues(alpha: 0.6), blurRadius: 4)],
+                                )),
+                          ],
+                        ),
+                      ),
+                      // ── Book progress bar ──
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: CardDualProgressBar(player: widget.player, accent: accent, isActive: _isActive, staticProgress: progress, staticDuration: _effectiveDuration, chapters: _chapters, showBookBar: !_isPodcastEpisode && !lib.isPodcastLibrary, showChapterBar: false),
+                      ),
+                      const SizedBox(height: 16),
+                      // ── Cover art (larger — 90% width) ──
+                      Flexible(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: ListenableBuilder(
+                            listenable: ChromecastService(),
+                            builder: (context, _) => LayoutBuilder(
+                              builder: (context, constraints) {
+                                final coverWidth = constraints.maxWidth * 0.90;
+                                final coverSize = coverWidth < constraints.maxHeight ? coverWidth : constraints.maxHeight;
+                                final isDownloaded = DownloadService().isDownloaded(_itemId);
+                                final castService = ChromecastService();
+                                final isCastingThis = castService.isCasting && castService.castingItemId == _itemId;
+                                return Container(
+                                  width: coverSize,
+                                  height: coverSize,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(16),
+                                    boxShadow: [
+                                      BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.15), blurRadius: 20, spreadRadius: -2, offset: const Offset(0, 6)),
+                                      BoxShadow(color: accent.withValues(alpha: 0.15), blurRadius: 30, spreadRadius: -5),
+                                    ],
+                                  ),
+                                  child: RepaintBoundary(
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(16),
+                                      child: Stack(
+                                        fit: StackFit.expand,
+                                        children: [
+                                          // Cover image
+                                          _coverUrl != null
+                                              ? _isLocalCover
+                                                  ? Image.file(File(_coverUrl!), fit: BoxFit.cover,
+                                                      errorBuilder: (_, __, ___) => _coverPlaceholder())
+                                                  : CachedNetworkImage(imageUrl: _coverUrl!, fit: BoxFit.cover,
+                                                        httpHeaders: mediaHeaders,
+                                                        placeholder: (_, __) => _coverPlaceholder(),
+                                                        errorWidget: (_, __, ___) => _coverPlaceholder())
+                                              : _coverPlaceholder(),
+                                          // Downloaded badge
+                                          if (isDownloaded)
+                                            Positioned(
+                                              top: 8, right: 8,
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.black.withValues(alpha: 0.6),
+                                                  borderRadius: BorderRadius.circular(10),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Icon(Icons.download_done_rounded, size: 13, color: accent.withValues(alpha: 0.9)),
+                                                    const SizedBox(width: 4),
+                                                    Text('Downloaded', style: TextStyle(color: accent.withValues(alpha: 0.9), fontSize: 10, fontWeight: FontWeight.w600)),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          // Casting overlay
+                                          if (isCastingThis) ...[
+                                            Positioned.fill(
+                                              child: Container(
+                                                decoration: BoxDecoration(
+                                                  color: Colors.black.withValues(alpha: 0.45),
+                                                  borderRadius: BorderRadius.circular(16),
+                                                ),
+                                              ),
+                                            ),
+                                            Positioned.fill(
+                                              child: Column(
+                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                children: [
+                                                  Icon(Icons.cast_connected_rounded, size: 36, color: accent.withValues(alpha: 0.9)),
+                                                  const SizedBox(height: 8),
+                                                  Text('Casting to', style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 11, fontWeight: FontWeight.w500)),
+                                                  const SizedBox(height: 2),
+                                                  Padding(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                                                    child: Text(
+                                                      castService.connectedDeviceName ?? 'Device',
+                                                      style: TextStyle(color: accent, fontSize: 14, fontWeight: FontWeight.w700),
+                                                      textAlign: TextAlign.center,
+                                                      maxLines: 2,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                          // Finished overlay
+                                          if (isFinished && !isCastingThis) ...[
+                                            Positioned.fill(
+                                              child: Container(color: Colors.black.withValues(alpha: 0.78)),
+                                            ),
+                                            Positioned.fill(
+                                              child: Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 14),
+                                                child: Column(
+                                                  mainAxisAlignment: MainAxisAlignment.center,
+                                                  children: [
+                                                    Icon(Icons.check_circle_rounded, size: 32, color: isDark ? Colors.green.shade400 : Colors.green.shade700),
+                                                    const SizedBox(height: 6),
+                                                    const Text('Finished',
+                                                      style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+                                                    const SizedBox(height: 18),
+                                                    SizedBox(
+                                                      width: double.infinity,
+                                                      child: GestureDetector(
+                                                        onTap: _listenAgain,
+                                                        child: Container(
+                                                          padding: const EdgeInsets.symmetric(vertical: 9),
+                                                          decoration: BoxDecoration(
+                                                            color: Colors.white.withValues(alpha: 0.18),
+                                                            borderRadius: BorderRadius.circular(11),
+                                                            border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+                                                          ),
+                                                          child: const Text('Listen Again',
+                                                            textAlign: TextAlign.center,
+                                                            style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 8),
+                                                    SizedBox(
+                                                      width: double.infinity,
+                                                      child: GestureDetector(
+                                                        onTap: () {
+                                                          _removeFromAbsorbing();
+                                                          _dismissExpanded();
+                                                        },
+                                                        child: Container(
+                                                          padding: const EdgeInsets.symmetric(vertical: 9),
+                                                          decoration: BoxDecoration(
+                                                            borderRadius: BorderRadius.circular(11),
+                                                            border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+                                                          ),
+                                                          child: const Text('Remove',
+                                                            textAlign: TextAlign.center,
+                                                            style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      // ── Chapter scrubber ──
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: CardDualProgressBar(player: widget.player, accent: accent, isActive: _isActive, staticProgress: _isPodcastEpisode ? 0.0 : progress, staticDuration: _isPodcastEpisode ? widget.player.totalDuration : _effectiveDuration, chapters: _chapters, showBookBar: false, showChapterBar: true, chapterName: _isPodcastEpisode ? (widget.player.currentEpisodeTitle ?? widget.player.currentTitle ?? _title) : (_episodeId != null && !_isActive ? (_recentEpisode!['title'] as String? ?? _title) : _chapterName(chapterIdx)), chapterIndex: chapterIdx, totalChapters: totalChapters),
+                      ),
+                      // ── Controls + buttons ──
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Column(
+                            children: [
+                              const Spacer(flex: 2),
+                              CardPlaybackControls(
+                                player: widget.player,
+                                accent: accent,
+                                isActive: _isActive,
+                                isStarting: _isStarting,
+                                onStart: _startPlayback,
+                                itemId: _itemId,
+                              ),
+                              const Spacer(flex: 3),
+                              // ── Button grid ──
+                              Row(children: [
+                                Expanded(child: CardWideButton(
+                                  icon: Icons.list_rounded, label: 'Chapters',
+                                  accent: accent, isActive: _isActive, large: true,
+                                  onTap: () => _showChapters(context, accent, tt),
+                                )),
+                                const SizedBox(width: 10),
+                                Expanded(child: CardWideButton(
+                                  icon: Icons.speed_rounded, label: 'Speed',
+                                  accent: accent, isActive: _isActive, large: true,
+                                  child: CardSpeedButtonInline(player: widget.player, accent: accent, isActive: _isActive, large: true),
+                                )),
+                              ]),
+                              const SizedBox(height: 10),
+                              Row(children: [
+                                Expanded(child: CardWideButton(
+                                  icon: Icons.bedtime_outlined, label: 'Sleep Timer',
+                                  accent: accent, isActive: _isActive, large: true,
+                                  child: CardSleepButtonInline(accent: accent, isActive: _isActive, large: true),
+                                )),
+                                const SizedBox(width: 10),
+                                Expanded(child: CardWideButton(
+                                  icon: Icons.bookmark_outline_rounded, label: 'Bookmarks',
+                                  accent: accent, isActive: _isActive, large: true,
+                                  child: CardBookmarkButtonInline(
+                                    player: widget.player, accent: accent,
+                                    isActive: _isActive, itemId: _itemId, large: true,
+                                  ),
+                                )),
+                              ]),
+                              const SizedBox(height: 10),
+                              // More menu
+                              Center(
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () => _showMoreMenu(context, accent, tt),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                                    decoration: BoxDecoration(
+                                      color: cs.onSurface.withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(22),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.more_horiz_rounded, size: 20, color: cs.onSurface.withValues(alpha: 0.54)),
+                                        const SizedBox(width: 6),
+                                        Text('More', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: cs.onSurface.withValues(alpha: 0.54))),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Background builder ──
+
+  Widget _buildBackground(bool isDark, Map<String, String> mediaHeaders) {
+    if (_blurredCover != null) {
+      return RepaintBoundary(
+        key: ValueKey('blur-$_itemId'),
+        child: RawImage(
+          image: _blurredCover,
+          fit: BoxFit.cover,
+          width: double.infinity,
+          height: double.infinity,
+        ),
+      );
+    }
+    if (_coverUrl != null) {
+      return RepaintBoundary(
+        key: ValueKey('cover-$_itemId'),
+        child: _isLocalCover
+            ? Builder(builder: (_) {
+                final provider = FileImage(File(_coverUrl!));
+                _onCoverLoaded(provider);
+                return Opacity(
+                  opacity: 0.3,
+                  child: Image.file(File(_coverUrl!), fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(color: isDark ? Colors.black : Colors.white)),
+                );
+              })
+            : CachedNetworkImage(
+                imageUrl: _coverUrl!,
+                fit: BoxFit.cover,
+                httpHeaders: mediaHeaders,
+                imageBuilder: (_, provider) {
+                  _onCoverLoaded(provider);
+                  return Opacity(
+                    opacity: 0.3,
+                    child: Image(image: provider, fit: BoxFit.cover),
+                  );
+                },
+                placeholder: (_, __) => Container(color: isDark ? Colors.black : Colors.white),
+                errorWidget: (_, __, ___) => Container(color: isDark ? Colors.black : Colors.white),
+              ),
+      );
+    }
+    return Container(key: const ValueKey('empty'), color: isDark ? Colors.black : Colors.white);
+  }
+
+  // ── Helpers (mirrored from AbsorbingCard) ──
+
+  int _currentChapterIndex() {
+    final chapters = _isActive ? widget.player.chapters : _chapters;
+    if (chapters.isEmpty) return -1;
+    double pos;
+    if (_isActive) {
+      pos = widget.player.position.inMilliseconds / 1000.0;
+    } else {
+      final lib = context.read<LibraryProvider>();
+      final progress = (_episodeId != null)
+          ? lib.getEpisodeProgress(_itemId, _episodeId!)
+          : lib.getProgress(_itemId);
+      pos = progress * _effectiveDuration;
+    }
+    for (int i = 0; i < chapters.length; i++) {
+      final ch = chapters[i] as Map<String, dynamic>;
+      final start = (ch['start'] as num?)?.toDouble() ?? 0;
+      final end = (ch['end'] as num?)?.toDouble() ?? 0;
+      if (pos >= start && pos < end) return i;
+    }
+    if (pos > 0 && chapters.isNotEmpty) return chapters.length - 1;
+    return 0;
+  }
+
+  String? _chapterName(int chapterIdx) {
+    if (_isActive && widget.player.currentChapter != null) {
+      return widget.player.currentChapter!['title'] as String?;
+    }
+    if (chapterIdx >= 0 && chapterIdx < _chapters.length) {
+      final ch = _chapters[chapterIdx] as Map<String, dynamic>;
+      return ch['title'] as String?;
+    }
+    return null;
+  }
+
+  Widget _coverPlaceholder() {
+    final cs2 = Theme.of(context).colorScheme;
+    return Container(
+      color: cs2.onSurface.withValues(alpha: 0.05),
+      child: Center(child: Icon(Icons.headphones_rounded, size: 48, color: cs2.onSurface.withValues(alpha: 0.15))),
+    );
+  }
+
+  String _fmtTime(double s) {
+    if (s < 0) s = 0;
+    final h = (s / 3600).floor(); final m = ((s % 3600) / 60).floor(); final sec = (s % 60).floor();
+    if (h > 0) return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
+    return '${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
+  }
+
+  String _fmtDur(double s) {
+    final h = (s / 3600).floor(); final m = ((s % 3600) / 60).floor(); final sec = (s % 60).floor();
+    if (h > 0) return '${h}h ${m}m';
+    return '${m}m ${sec}s';
+  }
+
+  // ── Playback actions ──
+
+  Future<void> _startPlayback() async {
+    if (_isStarting) return;
+    final cast = ChromecastService();
+    if (cast.isCasting && cast.castingItemId == _itemId) return;
+    setState(() => _isStarting = true);
+    final auth = context.read<AuthProvider>();
+    final api = auth.apiService;
+    if (api == null) { setState(() => _isStarting = false); return; }
+    await widget.player.playItem(
+      api: api, itemId: _itemId, title: _title, author: _author,
+      coverUrl: _coverUrl, totalDuration: _effectiveDuration, chapters: _chapters,
+      episodeId: _episodeId,
+      episodeTitle: _recentEpisode?['title'] as String?,
+    );
+    if (mounted) setState(() => _isStarting = false);
+  }
+
+  Future<void> _listenAgain() async {
+    if (_isStarting) return;
+    final cast = ChromecastService();
+    if (cast.isCasting && cast.castingItemId == _itemId) return;
+    setState(() => _isStarting = true);
+    final auth = context.read<AuthProvider>();
+    final api = auth.apiService;
+    if (api == null) { setState(() => _isStarting = false); return; }
+    final lib = context.read<LibraryProvider>();
+    await api.resetProgress(_itemId, _duration);
+    lib.resetProgressFor(_itemId);
+    await ProgressSyncService().deleteLocal(_itemId);
+    await widget.player.playItem(
+      api: api, itemId: _itemId, title: _title, author: _author,
+      coverUrl: _coverUrl, totalDuration: _duration, chapters: _chapters,
+    );
+    if (mounted) setState(() => _isStarting = false);
+  }
+
+  Future<void> _removeFromAbsorbing() async {
+    if (widget.player.currentItemId == _itemId) {
+      await widget.player.pause();
+      await widget.player.stop();
+    }
+    if (mounted) {
+      final lib = context.read<LibraryProvider>();
+      final key = _episodeId != null ? '$_itemId-$_episodeId' : _itemId;
+      await lib.removeFromAbsorbing(key);
+    }
+  }
+
+  // ── Bottom sheets ──
+
+  void _showChapters(BuildContext context, Color accent, TextTheme tt) {
+    final chapters = _isActive ? widget.player.chapters : _chapters;
+    if (chapters.isEmpty) return;
+    final totalDur = _isActive ? widget.player.totalDuration : _duration;
+
+    showModalBottomSheet(
+      context: context, isScrollControlled: true, useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false, initialChildSize: 0.6, maxChildSize: 0.9,
+        builder: (_, sc) => Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).bottomSheetTheme.backgroundColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            border: Border(top: BorderSide(color: accent.withValues(alpha: 0.2), width: 1)),
+          ),
+          child: Column(children: [
+            Padding(padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.24), borderRadius: BorderRadius.circular(2)))),
+            Text('Chapters', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Expanded(child: ListView.builder(
+              controller: sc, itemCount: chapters.length,
+              itemBuilder: (_, i) {
+                final ch = chapters[i] as Map<String, dynamic>;
+                final chTitle = ch['title'] as String? ?? 'Chapter ${i + 1}';
+                final start = (ch['start'] as num?)?.toDouble() ?? 0;
+                final end = (ch['end'] as num?)?.toDouble() ?? 0;
+                final pos = _isActive ? widget.player.position.inMilliseconds / 1000.0 : 0.0;
+                final isCurrent = _isActive && pos >= start && pos < end;
+                final pct = totalDur > 0 ? (end / totalDur * 100).round() : 0;
+                return ListTile(
+                  dense: true, selected: isCurrent,
+                  selectedTileColor: accent.withValues(alpha: 0.1),
+                  leading: SizedBox(width: 28, child: Text('${i + 1}', textAlign: TextAlign.center,
+                    style: tt.labelMedium?.copyWith(fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w400, color: isCurrent ? accent : Theme.of(context).colorScheme.onSurfaceVariant))),
+                  title: Text(chTitle, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: tt.bodyMedium?.copyWith(fontWeight: isCurrent ? FontWeight.w600 : FontWeight.w400, color: isCurrent ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7))),
+                  trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Text('$pct%', style: tt.labelSmall?.copyWith(
+                      color: isCurrent ? accent.withValues(alpha: 0.7) : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.24), fontSize: 10, fontWeight: FontWeight.w600)),
+                    const SizedBox(width: 8),
+                    Text(_fmtDur(end - start), style: tt.labelSmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                  ]),
+                  onTap: _isActive ? () {
+                    widget.player.seekTo(Duration(seconds: start.round()));
+                    Navigator.pop(ctx);
+                  } : null,
+                );
+              },
+            )),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  void _showHistory(BuildContext context, Color accent, TextTheme tt) {
+    showModalBottomSheet(
+      context: context, isScrollControlled: true, useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false, initialChildSize: 0.6, maxChildSize: 0.9,
+        builder: (_, sc) => Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).bottomSheetTheme.backgroundColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            border: Border(top: BorderSide(color: accent.withValues(alpha: 0.2), width: 1)),
+          ),
+          child: Column(children: [
+            Padding(padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.24), borderRadius: BorderRadius.circular(2)))),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(children: [
+                const Spacer(),
+                Text('Playback History', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                const Spacer(),
+                IconButton(
+                  icon: Icon(Icons.delete_outline_rounded, size: 20, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  onPressed: () async {
+                    await PlaybackHistoryService().clearHistory(_itemId);
+                    if (ctx.mounted) Navigator.pop(ctx);
+                  },
+                  tooltip: 'Clear history',
+                ),
+              ]),
+            ),
+            const SizedBox(height: 8),
+            Expanded(child: FutureBuilder<List<PlaybackEvent>>(
+              future: PlaybackHistoryService().getHistory(_itemId),
+              builder: (ctx, snap) {
+                if (!snap.hasData) return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+                final events = snap.data!;
+                if (events.isEmpty) return Center(child: Text('No history yet', style: tt.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)));
+                return ListView.builder(
+                  controller: sc, itemCount: events.length,
+                  itemBuilder: (_, i) {
+                    final e = events[i];
+                    final posLabel = _fmtTime(e.positionSeconds);
+                    final timeAgo = _timeAgo(e.timestamp);
+                    return ListTile(
+                      dense: true,
+                      leading: Icon(_historyIcon(e.type), size: 18, color: accent.withValues(alpha: 0.7)),
+                      title: Text(e.label, style: tt.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7))),
+                      subtitle: Text('at $posLabel', style: tt.labelSmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                      trailing: Text(timeAgo, style: tt.labelSmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3))),
+                      onTap: _isActive ? () {
+                        widget.player.seekTo(Duration(seconds: e.positionSeconds.round()));
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(duration: const Duration(seconds: 3), content: Text('Jumped to $posLabel')));
+                      } : null,
+                    );
+                  },
+                );
+              },
+            )),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  void _showMoreMenu(BuildContext context, Color accent, TextTheme tt) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).bottomSheetTheme.backgroundColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border(top: BorderSide(color: accent.withValues(alpha: 0.2), width: 1)),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(width: 40, height: 4, decoration: BoxDecoration(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.24), borderRadius: BorderRadius.circular(2))),
+                const SizedBox(height: 16),
+                MoreMenuItem(
+                  icon: (_episodeId != null || _isPodcastEpisode) ? Icons.podcasts_rounded : Icons.info_outline_rounded,
+                  label: (_episodeId != null || _isPodcastEpisode) ? 'Episode Details' : 'Book Details',
+                  accent: accent,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    if (_episodeId != null || _isPodcastEpisode) {
+                      final episode = _recentEpisode ?? {
+                        'id': widget.player.currentEpisodeId,
+                        'title': widget.player.currentEpisodeTitle,
+                        'duration': widget.player.totalDuration,
+                      };
+                      EpisodeDetailSheet.show(context, _item, episode);
+                    } else {
+                      showBookDetailSheet(context, _itemId);
+                    }
+                  },
+                ),
+                const SizedBox(height: 6),
+                MoreMenuItem(
+                  icon: Icons.equalizer_rounded,
+                  label: 'Audio Enhancements',
+                  accent: accent,
+                  onTap: () { Navigator.pop(ctx); showEqualizerSheet(context, accent); },
+                ),
+                const SizedBox(height: 6),
+                ListenableBuilder(
+                  listenable: ChromecastService(),
+                  builder: (_, __) {
+                    final cast = ChromecastService();
+                    final String castLabel;
+                    if (cast.isCasting && cast.castingItemId == _itemId) {
+                      castLabel = 'Casting to ${cast.connectedDeviceName ?? "device"}';
+                    } else if (cast.isConnected) {
+                      castLabel = 'Cast to ${cast.connectedDeviceName ?? "device"}';
+                    } else {
+                      castLabel = 'Cast to Device';
+                    }
+                    return MoreMenuItem(
+                      icon: cast.isConnected ? Icons.cast_connected_rounded : Icons.cast_rounded,
+                      label: castLabel,
+                      accent: accent,
+                      onTap: () {
+                        final auth = context.read<AuthProvider>();
+                        final api = auth.apiService;
+                        Navigator.pop(ctx);
+                        if (cast.isCasting && cast.castingItemId == _itemId) {
+                          showModalBottomSheet(
+                            context: context,
+                            backgroundColor: Theme.of(context).bottomSheetTheme.backgroundColor,
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                            ),
+                            builder: (_) => const CastControlSheet(),
+                          );
+                        } else if (cast.isConnected) {
+                          if (api != null) {
+                            cast.castItem(
+                              api: api, itemId: _itemId, title: _title, author: _author,
+                              coverUrl: _coverUrl, totalDuration: _duration, chapters: _chapters,
+                            );
+                          }
+                        } else {
+                          showCastDevicePicker(context,
+                            api: api, itemId: _itemId, title: _title, author: _author,
+                            coverUrl: _coverUrl, totalDuration: _duration, chapters: _chapters);
+                        }
+                      },
+                    );
+                  },
+                ),
+                const SizedBox(height: 6),
+                MoreMenuItem(
+                  icon: Icons.history_rounded,
+                  label: 'Playback History',
+                  accent: accent,
+                  enabled: _isActive,
+                  onTap: () { Navigator.pop(ctx); _showHistory(context, accent, tt); },
+                ),
+                const SizedBox(height: 6),
+                MoreMenuItem(
+                  icon: Icons.remove_circle_outline_rounded,
+                  label: 'Remove from Absorbing',
+                  accent: Colors.red.shade300,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _removeFromAbsorbing();
+                    _dismissExpanded();
+                  },
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  IconData _historyIcon(PlaybackEventType type) {
+    switch (type) {
+      case PlaybackEventType.play: return Icons.play_arrow_rounded;
+      case PlaybackEventType.pause: return Icons.pause_rounded;
+      case PlaybackEventType.seek: return Icons.swap_horiz_rounded;
+      case PlaybackEventType.syncLocal: return Icons.save_rounded;
+      case PlaybackEventType.syncServer: return Icons.cloud_done_rounded;
+      case PlaybackEventType.autoRewind: return Icons.replay_rounded;
+      case PlaybackEventType.skipForward: return Icons.forward_30_rounded;
+      case PlaybackEventType.skipBackward: return Icons.replay_10_rounded;
+      case PlaybackEventType.speedChange: return Icons.speed_rounded;
+    }
+  }
+
+  String _timeAgo(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inSeconds < 60) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
+  }
+}

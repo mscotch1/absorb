@@ -6,6 +6,7 @@ import '../providers/library_provider.dart';
 import '../services/audio_player_service.dart';
 import '../services/sleep_timer_service.dart';
 import '../services/android_auto_service.dart';
+import '../widgets/expanded_card.dart';
 import 'absorbing_screen.dart';
 import 'home_screen.dart';
 import 'library_screen.dart';
@@ -26,6 +27,11 @@ class AppShell extends StatefulWidget {
     _AppShellState._instance?._switchToAbsorbing();
   }
 
+  /// Track when expanded card is opened/closed externally (e.g. chevron tap).
+  static void setExpandedOpen(bool open) {
+    _AppShellState._instance?._expandedIsOpen = open;
+  }
+
   @override
   State<AppShell> createState() => _AppShellState();
 }
@@ -36,6 +42,11 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   // Tabs: 0=Home, 1=Library, 2=Absorbing (default), 3=Stats, 4=Settings
   int _currentIndex = 2;
   final _libraryKey = GlobalKey<LibraryScreenState>();
+  final _player = AudioPlayerService();
+  bool _playerHadBook = false;
+  bool _wasPlaying = false;
+  String? _lastItemId;
+  bool _expandedIsOpen = false;
 
   void _switchToAbsorbing() {
     if (mounted) {
@@ -66,15 +77,91 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     _instance = this;
+    _playerHadBook = _player.hasBook;
+    _wasPlaying = _player.isPlaying;
+    _lastItemId = _player.currentItemId;
     WidgetsBinding.instance.addObserver(this);
     AudioPlayerService.setOnEpisodePlayStartedCallback(AppShell.goToAbsorbingGlobal);
+    _player.addListener(_onPlayerChanged);
   }
 
   @override
   void dispose() {
+    _player.removeListener(_onPlayerChanged);
     if (_instance == this) _instance = null;
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  void _onPlayerChanged() {
+    final hasBook = _player.hasBook;
+    final playing = _player.isPlaying;
+    final itemId = _player.currentItemId;
+
+    // Detect playback starting: new book loaded, play resumed, or item changed
+    final newBook = hasBook && !_playerHadBook;
+    final playStarted = playing && !_wasPlaying;
+    final itemChanged = itemId != null && itemId != _lastItemId;
+
+    _playerHadBook = hasBook;
+    _wasPlaying = playing;
+    _lastItemId = itemId;
+
+    if ((newBook || playStarted || itemChanged) && !_expandedIsOpen) {
+      _maybeAutoExpand();
+    }
+  }
+
+  Future<void> _maybeAutoExpand() async {
+    final enabled = await PlayerSettings.getFullScreenPlayer();
+    if (!enabled || !mounted || !_player.hasBook) return;
+
+    // Synthesize item data from player state
+    final itemId = _player.currentItemId;
+    if (itemId == null) return;
+
+    final lib = context.read<LibraryProvider>();
+    // Try to find the real item data from the library
+    Map<String, dynamic>? item;
+    for (final section in lib.personalizedSections) {
+      for (final e in (section['entities'] as List<dynamic>? ?? [])) {
+        if (e is Map<String, dynamic> && e['id'] == itemId) {
+          item = e;
+          break;
+        }
+      }
+      if (item != null) break;
+    }
+    // Fallback: synthesize from player data
+    item ??= {
+      'id': itemId,
+      'media': {
+        'metadata': {
+          'title': _player.currentTitle ?? 'Unknown',
+          'authorName': _player.currentAuthor ?? '',
+        },
+        'duration': _player.totalDuration,
+        'chapters': _player.chapters,
+      },
+    };
+    if (_player.currentEpisodeId != null) {
+      item['recentEpisode'] = {
+        'id': _player.currentEpisodeId,
+        'title': _player.currentEpisodeTitle ?? _player.currentTitle,
+        'duration': _player.totalDuration,
+      };
+    }
+
+    _expandedIsOpen = true;
+    final nav = Navigator.of(context, rootNavigator: true);
+    await nav.push(ExpandedCardRoute(
+      child: ExpandedCard(
+        item: item,
+        player: _player,
+      ),
+    ));
+    // Route was popped — expanded view closed
+    _expandedIsOpen = false;
   }
 
   @override

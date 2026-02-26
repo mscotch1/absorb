@@ -129,6 +129,9 @@ class PlayerSettings {
   static Future<bool> getLoggingEnabled() => _get('loggingEnabled', false);
   static Future<void> setLoggingEnabled(bool value) => _set('loggingEnabled', value);
 
+  static Future<bool> getFullScreenPlayer() => _get('fullScreenPlayer', false);
+  static Future<void> setFullScreenPlayer(bool value) => _set('fullScreenPlayer', value);
+
   // ── Appearance ──
 
   static Future<String> getThemeMode() => _get('themeMode', 'dark');
