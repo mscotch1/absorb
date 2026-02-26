@@ -1291,13 +1291,13 @@ class _GridBookTileState extends State<_GridBookTile> {
                           children: [
                             if (isFinished) ...[
                               Icon(Icons.check_circle_rounded,
-                                  size: 10, color: Colors.greenAccent[400]),
+                                  size: 10, color: Theme.of(context).brightness == Brightness.dark ? Colors.greenAccent[400] : Colors.green.shade700),
                               const SizedBox(width: 3),
                               Text('Done',
                                   style: TextStyle(
                                       fontSize: 9,
                                       fontWeight: FontWeight.w600,
-                                      color: Colors.greenAccent[400])),
+                                      color: Theme.of(context).brightness == Brightness.dark ? Colors.greenAccent[400] : Colors.green.shade700)),
                             ],
                             if (isFinished && isDownloaded)
                               const SizedBox(width: 6),
@@ -2186,13 +2186,13 @@ class _SeriesBooksSheetState extends State<_SeriesBooksSheet> {
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           Icon(Icons.check_circle_rounded,
-                                              size: 10, color: Colors.greenAccent[400]),
+                                              size: 10, color: Theme.of(context).brightness == Brightness.dark ? Colors.greenAccent[400] : Colors.green.shade700),
                                           const SizedBox(width: 3),
                                           Text('Done',
                                               style: TextStyle(
                                                   fontSize: 9,
                                                   fontWeight: FontWeight.w600,
-                                                  color: Colors.greenAccent[400])),
+                                                  color: Theme.of(context).brightness == Brightness.dark ? Colors.greenAccent[400] : Colors.green.shade700)),
                                         ],
                                       ),
                                     ),

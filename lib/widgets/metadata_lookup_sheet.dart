@@ -146,9 +146,9 @@ class _MetadataLookupSheetState extends State<MetadataLookupSheet> {
     final tt = Theme.of(context).textTheme;
 
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF1A1A1A),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: Theme.of(context).bottomSheetTheme.backgroundColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
         children: [
@@ -217,7 +217,7 @@ class _MetadataLookupSheetState extends State<MetadataLookupSheet> {
                           child: DropdownButton<String>(
                             value: _provider,
                             isExpanded: true,
-                            dropdownColor: const Color(0xFF2A2A2A),
+                            dropdownColor: Theme.of(context).colorScheme.surfaceContainerHigh,
                             style: tt.bodySmall
                                 ?.copyWith(color: Colors.white70),
                             icon: Icon(Icons.expand_more_rounded,

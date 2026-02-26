@@ -38,23 +38,24 @@ class CardWideButton extends StatelessWidget {
 
   @override Widget build(BuildContext context) {
     if (child != null) return child!;
+    final cs = Theme.of(context).colorScheme;
     final enabled = isActive || alwaysEnabled;
     return GestureDetector(
       onTap: enabled ? onTap : () => showInactiveToast(context),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.06),
+          color: cs.onSurface.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          border: Border.all(color: cs.onSurface.withValues(alpha: 0.08)),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 15, color: enabled ? Colors.white54 : Colors.white24),
+            Icon(icon, size: 15, color: enabled ? cs.onSurfaceVariant : cs.onSurface.withValues(alpha: 0.24)),
             const SizedBox(width: 6),
             Text(label, style: TextStyle(
-              color: enabled ? Colors.white54 : Colors.white24,
+              color: enabled ? cs.onSurfaceVariant : cs.onSurface.withValues(alpha: 0.24),
               fontSize: 11, fontWeight: FontWeight.w500)),
           ],
         ),
@@ -79,23 +80,24 @@ class MoreMenuItem extends StatelessWidget {
   });
 
   @override Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: enabled ? onTap : () => showInactiveToast(context),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.06),
+          color: cs.onSurface.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          border: Border.all(color: cs.onSurface.withValues(alpha: 0.08)),
         ),
         child: Row(
           children: [
-            Icon(icon, size: 20, color: enabled ? accent.withValues(alpha: 0.7) : Colors.white24),
+            Icon(icon, size: 20, color: enabled ? accent.withValues(alpha: 0.7) : cs.onSurface.withValues(alpha: 0.24)),
             const SizedBox(width: 14),
             Expanded(child: Text(label, style: TextStyle(
-              color: enabled ? Colors.white.withValues(alpha: 0.8) : Colors.white24,
+              color: enabled ? cs.onSurface.withValues(alpha: 0.8) : cs.onSurface.withValues(alpha: 0.24),
               fontSize: 14, fontWeight: FontWeight.w500))),
-            Icon(Icons.chevron_right_rounded, size: 18, color: enabled ? Colors.white24 : Colors.white12),
+            Icon(Icons.chevron_right_rounded, size: 18, color: enabled ? cs.onSurface.withValues(alpha: 0.24) : cs.onSurface.withValues(alpha: 0.12)),
           ],
         ),
       ),
@@ -113,6 +115,7 @@ class CardSleepButtonInline extends StatelessWidget {
     return ListenableBuilder(
       listenable: SleepTimerService(),
       builder: (_, __) {
+        final cs = Theme.of(context).colorScheme;
         final sleep = SleepTimerService();
         // Only show timer state on the card that's actually playing
         final active = isActive && sleep.isActive;
@@ -138,9 +141,9 @@ class CardSleepButtonInline extends StatelessWidget {
             height: 36,
             clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
-              color: active ? accent.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.06),
+              color: active ? accent.withValues(alpha: 0.1) : cs.onSurface.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: active ? accent.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.08)),
+              border: Border.all(color: active ? accent.withValues(alpha: 0.3) : cs.onSurface.withValues(alpha: 0.08)),
             ),
             child: Stack(children: [
               if (active && isTime)
@@ -157,10 +160,10 @@ class CardSleepButtonInline extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.bedtime_outlined, size: 16,
-                    color: active ? accent : (isActive ? Colors.white54 : Colors.white24)),
+                    color: active ? accent : (isActive ? cs.onSurfaceVariant : cs.onSurface.withValues(alpha: 0.24))),
                   const SizedBox(width: 8),
                   Text(label, style: TextStyle(
-                    color: active ? accent : (isActive ? Colors.white54 : Colors.white24),
+                    color: active ? accent : (isActive ? cs.onSurfaceVariant : cs.onSurface.withValues(alpha: 0.24)),
                     fontSize: active && isTime ? 13 : 12,
                     fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                     fontFeatures: active && isTime ? const [FontFeature.tabularFigures()] : null,
@@ -194,24 +197,25 @@ class _CardBookmarkButtonInlineState extends State<CardBookmarkButtonInline> {
   }
 
   @override Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: widget.isActive ? () => _showBookmarks(context) : () => showInactiveToast(context),
       onLongPress: widget.isActive ? () => _quickAdd(context) : null,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.06),
+          color: cs.onSurface.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          border: Border.all(color: cs.onSurface.withValues(alpha: 0.08)),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.bookmark_outline_rounded, size: 18,
-              color: widget.isActive ? Colors.white54 : Colors.white24),
+              color: widget.isActive ? cs.onSurfaceVariant : cs.onSurface.withValues(alpha: 0.24)),
             const SizedBox(width: 8),
             Text(_count > 0 ? 'Bookmarks ($_count)' : 'Bookmark', style: TextStyle(
-              color: widget.isActive ? Colors.white54 : Colors.white24,
+              color: widget.isActive ? cs.onSurfaceVariant : cs.onSurface.withValues(alpha: 0.24),
               fontSize: 12, fontWeight: FontWeight.w500)),
           ],
         ),
@@ -255,6 +259,7 @@ class CardSpeedButtonInline extends StatelessWidget {
   const CardSpeedButtonInline({super.key, required this.player, required this.accent, required this.isActive});
 
   @override Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: isActive ? () {
         showModalBottomSheet(context: context, backgroundColor: Colors.transparent,
@@ -264,18 +269,18 @@ class CardSpeedButtonInline extends StatelessWidget {
       child: Container(
         height: 36,
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.06),
+          color: cs.onSurface.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          border: Border.all(color: cs.onSurface.withValues(alpha: 0.08)),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.speed_rounded, size: 16,
-              color: isActive ? accent : Colors.white24),
+              color: isActive ? accent : cs.onSurface.withValues(alpha: 0.24)),
             const SizedBox(width: 8),
             Text('${player.speed.toStringAsFixed(2)}x', style: TextStyle(
-              color: isActive ? accent : Colors.white24,
+              color: isActive ? accent : cs.onSurface.withValues(alpha: 0.24),
               fontSize: 13, fontWeight: FontWeight.w700)),
           ],
         ),
@@ -304,12 +309,12 @@ class _CardSpeedSheetState extends State<CardSpeedSheet> {
     final navBarPad = MediaQuery.of(context).viewPadding.bottom;
     return Container(
       padding: EdgeInsets.fromLTRB(24, 16, 24, 24 + navBarPad),
-      decoration: BoxDecoration(color: const Color(0xFF1A1A1A), borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(color: Theme.of(context).bottomSheetTheme.backgroundColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         border: Border(top: BorderSide(color: widget.accent.withValues(alpha: 0.2), width: 1))),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+        Container(width: 40, height: 4, decoration: BoxDecoration(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.24), borderRadius: BorderRadius.circular(2))),
         const SizedBox(height: 20),
-        Text('Playback Speed', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w600, color: Colors.white)),
+        Text('Playback Speed', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
         const SizedBox(height: 4),
         Text('${_speed.toStringAsFixed(2)}x', style: tt.headlineMedium?.copyWith(fontWeight: FontWeight.w700, color: widget.accent)),
         const SizedBox(height: 16),
@@ -318,18 +323,18 @@ class _CardSpeedSheetState extends State<CardSpeedSheet> {
           return GestureDetector(onTap: () => _setSpeed(s), child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(color: a ? widget.accent : Colors.white.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: a ? widget.accent : Colors.white.withValues(alpha: 0.12))),
-            child: Text('${s}x', style: TextStyle(color: a ? Colors.black : Colors.white70, fontSize: 13, fontWeight: a ? FontWeight.w700 : FontWeight.w500)),
+            decoration: BoxDecoration(color: a ? widget.accent : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: a ? widget.accent : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12))),
+            child: Text('${s}x', style: TextStyle(color: a ? Theme.of(context).colorScheme.surface : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7), fontSize: 13, fontWeight: a ? FontWeight.w700 : FontWeight.w500)),
           ));
         }).toList()),
         const SizedBox(height: 16),
         AbsorbSlider(value: _speed, min: 0.5, max: 3.0, divisions: 50, activeColor: widget.accent, onChanged: _setSpeed),
         Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: const [
-            Text('0.5x', style: TextStyle(color: Colors.white30, fontSize: 11)),
-            Text('3.0x', style: TextStyle(color: Colors.white30, fontSize: 11)),
+          children: [
+            Text('0.5x', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3), fontSize: 11)),
+            Text('3.0x', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3), fontSize: 11)),
           ],
         )),
       ]),
@@ -356,18 +361,19 @@ class _SimpleBookmarkSheetState extends State<SimpleBookmarkSheet> {
 
   @override Widget build(BuildContext context) {
     final tt = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
+        color: Theme.of(context).bottomSheetTheme.backgroundColor,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         border: Border(top: BorderSide(color: widget.accent.withValues(alpha: 0.2), width: 1)),
       ),
       child: Column(children: [
         Padding(padding: const EdgeInsets.symmetric(vertical: 12),
-          child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
+          child: Container(width: 40, height: 4, decoration: BoxDecoration(color: cs.onSurface.withValues(alpha: 0.24), borderRadius: BorderRadius.circular(2)))),
         Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: Row(children: [
           const Spacer(),
-          Text('Bookmarks', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w600, color: Colors.white)),
+          Text('Bookmarks', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
           const Spacer(),
           GestureDetector(onTap: () => _addBookmark(), child: Container(
             width: 36, height: 36,
@@ -380,11 +386,11 @@ class _SimpleBookmarkSheetState extends State<SimpleBookmarkSheet> {
             ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
             : _bookmarks!.isEmpty
                 ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.bookmark_outline_rounded, size: 48, color: Colors.white.withValues(alpha: 0.1)),
+                    Icon(Icons.bookmark_outline_rounded, size: 48, color: cs.onSurface.withValues(alpha: 0.1)),
                     const SizedBox(height: 12),
-                    Text('No bookmarks yet', style: tt.bodyMedium?.copyWith(color: Colors.white38)),
+                    Text('No bookmarks yet', style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
                     const SizedBox(height: 4),
-                    Text('Long-press the bookmark button to quick save', style: tt.bodySmall?.copyWith(color: Colors.white24, fontSize: 11)),
+                    Text('Long-press the bookmark button to quick save', style: tt.bodySmall?.copyWith(color: cs.onSurface.withValues(alpha: 0.24), fontSize: 11)),
                   ]))
                 : ListView.builder(
                     controller: widget.scrollController, padding: const EdgeInsets.only(bottom: 24), itemCount: _bookmarks!.length,
@@ -404,20 +410,20 @@ class _SimpleBookmarkSheetState extends State<SimpleBookmarkSheet> {
                             const SizedBox(width: 12),
                             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                               Text(bm.title, maxLines: 1, overflow: TextOverflow.ellipsis,
-                                style: tt.bodyMedium?.copyWith(color: Colors.white70)),
+                                style: tt.bodyMedium?.copyWith(color: cs.onSurface.withValues(alpha: 0.7))),
                               const SizedBox(height: 2),
-                              Text(bm.formattedPosition, style: tt.labelSmall?.copyWith(color: Colors.white38)),
+                              Text(bm.formattedPosition, style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
                               if (hasNote) ...[
                                 const SizedBox(height: 4),
                                 Container(
                                   width: double.infinity,
                                   padding: const EdgeInsets.all(8),
                                   decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.04),
+                                    color: cs.onSurface.withValues(alpha: 0.04),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(bm.note!, maxLines: 3, overflow: TextOverflow.ellipsis,
-                                    style: tt.bodySmall?.copyWith(color: Colors.white38, fontSize: 11, height: 1.4)),
+                                    style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, fontSize: 11, height: 1.4)),
                                 ),
                               ],
                             ])),
@@ -427,9 +433,9 @@ class _SimpleBookmarkSheetState extends State<SimpleBookmarkSheet> {
                                 await BookmarkService().deleteBookmark(itemId: widget.itemId, bookmarkId: bm.id);
                                 _load();
                               },
-                              child: const Padding(
-                                padding: EdgeInsets.all(4),
-                                child: Icon(Icons.close_rounded, size: 16, color: Colors.white24),
+                              child: Padding(
+                                padding: const EdgeInsets.all(4),
+                                child: Icon(Icons.close_rounded, size: 16, color: cs.onSurface.withValues(alpha: 0.24)),
                               ),
                             ),
                           ]),

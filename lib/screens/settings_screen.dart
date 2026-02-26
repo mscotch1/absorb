@@ -15,6 +15,7 @@ import '../services/log_service.dart';
 import '../screens/login_screen.dart';
 import '../screens/app_shell.dart';
 import '../screens/admin_screen.dart';
+import '../main.dart' show themeNotifier, parseThemeMode;
 import '../widgets/absorb_page_header.dart';
 import '../widgets/absorb_slider.dart';
 
@@ -40,6 +41,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _hideEbookOnly = false;
   bool _showGoodreadsButton = false;
   bool _loggingEnabled = false;
+  String _themeMode = 'dark';
   bool _loaded = false;
   String _downloadLocationLabel = 'App Internal Storage (Default)';
   int _totalDownloadSizeBytes = 0;
@@ -67,6 +69,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final hideEbook = await PlayerSettings.getHideEbookOnly();
     final showGoodreads = await PlayerSettings.getShowGoodreadsButton();
     final logging = await PlayerSettings.getLoggingEnabled();
+    final theme = await PlayerSettings.getThemeMode();
 
     final dlLabel = await DownloadService().downloadLocationLabel;
     final dlSize = await DownloadService().totalDownloadSize;
@@ -87,6 +90,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _hideEbookOnly = hideEbook;
       _showGoodreadsButton = showGoodreads;
       _loggingEnabled = logging;
+      _themeMode = theme;
       _downloadLocationLabel = dlLabel;
       _totalDownloadSizeBytes = dlSize;
       _autoSleepSettings = autoSleep;
@@ -243,8 +247,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             stops: const [0.0, 0.35, 1.0],
             colors: [
               cs.primary.withValues(alpha: 0.10),
-              const Color(0xFF121212),
-              const Color(0xFF0E0E0E),
+              Theme.of(context).scaffoldBackgroundColor,
+              Theme.of(context).scaffoldBackgroundColor,
             ],
           ),
         ),
@@ -382,6 +386,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                 const SizedBox(height: 20),
 
+                // ── Appearance ──
+                _CollapsibleSection(
+                  icon: Icons.palette_outlined,
+                  title: 'Appearance',
+                  cs: cs,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Theme', style: tt.titleSmall),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: SegmentedButton<String>(
+                              segments: const [
+                                ButtonSegment(value: 'dark', icon: Icon(Icons.dark_mode_rounded), label: Text('Dark')),
+                                ButtonSegment(value: 'light', icon: Icon(Icons.light_mode_rounded), label: Text('Light')),
+                                ButtonSegment(value: 'system', icon: Icon(Icons.brightness_auto_rounded), label: Text('System')),
+                              ],
+                              selected: {_themeMode},
+                              onSelectionChanged: _loaded ? (selected) {
+                                final mode = selected.first;
+                                setState(() => _themeMode = mode);
+                                PlayerSettings.setThemeMode(mode);
+                                themeNotifier.value = parseThemeMode(mode);
+                              } : null,
+                              style: const ButtonStyle(
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
 
                 // ── Playback ──
                 _CollapsibleSection(
@@ -896,7 +939,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       title: const Text('Notifications'),
                       subtitle: Text('For download progress and playback controls',
                         style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-                      trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white38),
+                      trailing: Icon(Icons.chevron_right_rounded, color: cs.onSurfaceVariant),
                       onTap: () async {
                         final status = await Permission.notification.status;
                         if (status.isGranted) {
@@ -920,7 +963,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       title: const Text('Unrestricted battery'),
                       subtitle: Text('Prevents Android from killing background playback',
                         style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-                      trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white38),
+                      trailing: Icon(Icons.chevron_right_rounded, color: cs.onSurfaceVariant),
                       onTap: () async {
                         if (Platform.isAndroid) {
                           final status = await Permission.ignoreBatteryOptimizations.status;

@@ -74,7 +74,7 @@ class _StatsScreenState extends State<StatsScreen> with SingleTickerProviderStat
     final tt = Theme.of(context).textTheme;
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -84,14 +84,14 @@ class _StatsScreenState extends State<StatsScreen> with SingleTickerProviderStat
             colors: [
               cs.primary.withValues(alpha: 0.12),
               cs.primary.withValues(alpha: 0.04),
-              Colors.black,
-              Colors.black,
+              Theme.of(context).scaffoldBackgroundColor,
+              Theme.of(context).scaffoldBackgroundColor,
             ],
           ),
         ),
         child: SafeArea(
         child: _isLoading
-            ? const Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white24))
+            ? Center(child: CircularProgressIndicator(strokeWidth: 2, color: cs.onSurface.withValues(alpha: 0.24)))
             : _stats == null
                 ? _errorState(tt)
                 : RefreshIndicator(
@@ -100,7 +100,7 @@ class _StatsScreenState extends State<StatsScreen> with SingleTickerProviderStat
                       await _loadStats();
                     },
                     color: cs.primary,
-                    backgroundColor: const Color(0xFF1A1A1A),
+                    backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh,
                     child: AnimatedBuilder(
                       animation: _animValue,
                       builder: (_, __) => _buildContent(cs, tt),
@@ -112,10 +112,11 @@ class _StatsScreenState extends State<StatsScreen> with SingleTickerProviderStat
   }
 
   Widget _errorState(TextTheme tt) {
+    final cs = Theme.of(context).colorScheme;
     return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-      Icon(Icons.signal_wifi_off_rounded, size: 48, color: Colors.white.withValues(alpha: 0.15)),
+      Icon(Icons.signal_wifi_off_rounded, size: 48, color: cs.onSurface.withValues(alpha: 0.15)),
       const SizedBox(height: 12),
-      Text('Couldn\'t load stats', style: tt.bodyMedium?.copyWith(color: Colors.white38)),
+      Text('Couldn\'t load stats', style: tt.bodyMedium?.copyWith(color: cs.onSurface.withValues(alpha: 0.38))),
       const SizedBox(height: 8),
       TextButton(onPressed: () { setState(() => _isLoading = true); _loadStats(); },
         child: const Text('Retry')),
@@ -142,57 +143,55 @@ class _StatsScreenState extends State<StatsScreen> with SingleTickerProviderStat
         // Header
         const AbsorbPageHeader(
           title: 'Your Stats',
-          brandingColor: Colors.white38,
-          titleColor: Colors.white,
           padding: EdgeInsets.only(top: 4),
         ),
         const SizedBox(height: 24),
 
         // ── Hero stat ──
-        _heroStat(tt, totalSeconds),
+        _heroStat(tt, cs, totalSeconds),
         const SizedBox(height: 24),
 
         // ── Quick stats row ──
         Row(children: [
-          Expanded(child: _statCard(tt, Icons.local_fire_department_rounded, Colors.orange,
+          Expanded(child: _statCard(tt, cs, Icons.local_fire_department_rounded, Colors.orange,
             '${streak}d', 'Current\nStreak')),
           const SizedBox(width: 10),
-          Expanded(child: _statCard(tt, Icons.emoji_events_rounded, Colors.amber,
+          Expanded(child: _statCard(tt, cs, Icons.emoji_events_rounded, Colors.amber,
             '${longestStreak}d', 'Longest\nStreak')),
           const SizedBox(width: 10),
-          Expanded(child: _statCard(tt, Icons.check_circle_rounded, Colors.green,
+          Expanded(child: _statCard(tt, cs, Icons.check_circle_rounded, Colors.green,
             '$booksFinished', 'Books\nFinished')),
         ]),
         const SizedBox(height: 24),
 
         // ── Time periods ──
         Row(children: [
-          Expanded(child: _periodCard(tt, 'Today', today)),
+          Expanded(child: _periodCard(tt, cs, 'Today', today)),
           const SizedBox(width: 10),
-          Expanded(child: _periodCard(tt, 'This Week', thisWeek)),
+          Expanded(child: _periodCard(tt, cs, 'This Week', thisWeek)),
           const SizedBox(width: 10),
-          Expanded(child: _periodCard(tt, 'This Month', thisMonth)),
+          Expanded(child: _periodCard(tt, cs, 'This Month', thisMonth)),
         ]),
         const SizedBox(height: 28),
 
         // ── Last 7 days chart ──
         Text('Last 7 Days', style: tt.titleSmall?.copyWith(
-          color: Colors.white60, fontWeight: FontWeight.w600)),
+          color: cs.onSurface.withValues(alpha: 0.6), fontWeight: FontWeight.w600)),
         const SizedBox(height: 12),
         _barChart(weekData, cs),
         const SizedBox(height: 28),
 
         // ── Last 30 days chart ──
         Text('Last 30 Days', style: tt.titleSmall?.copyWith(
-          color: Colors.white60, fontWeight: FontWeight.w600)),
+          color: cs.onSurface.withValues(alpha: 0.6), fontWeight: FontWeight.w600)),
         const SizedBox(height: 12),
-        _heatMap(monthData, tt),
+        _heatMap(monthData, tt, cs),
         const SizedBox(height: 28),
 
         // ── Recent Sessions ──
         if (_sessions.isNotEmpty) ...[
           Text('Recent Sessions', style: tt.titleSmall?.copyWith(
-            color: Colors.white60, fontWeight: FontWeight.w600)),
+            color: cs.onSurface.withValues(alpha: 0.6), fontWeight: FontWeight.w600)),
           const SizedBox(height: 12),
           ..._buildSessions(tt, cs),
         ],
@@ -202,7 +201,7 @@ class _StatsScreenState extends State<StatsScreen> with SingleTickerProviderStat
 
   // ─── HERO STAT ──────────────────────────────────────────────
 
-  Widget _heroStat(TextTheme tt, double totalSeconds) {
+  Widget _heroStat(TextTheme tt, ColorScheme cs, double totalSeconds) {
     final hours = (totalSeconds / 3600).floor();
     final minutes = ((totalSeconds % 3600) / 60).floor();
     final anim = _animValue.value;
@@ -214,32 +213,32 @@ class _StatsScreenState extends State<StatsScreen> with SingleTickerProviderStat
         gradient: LinearGradient(
           begin: Alignment.topLeft, end: Alignment.bottomRight,
           colors: [
-            Colors.white.withValues(alpha: 0.06),
-            Colors.white.withValues(alpha: 0.02),
+            cs.onSurface.withValues(alpha: 0.06),
+            cs.onSurface.withValues(alpha: 0.02),
           ],
         ),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        border: Border.all(color: cs.onSurface.withValues(alpha: 0.08)),
       ),
       child: Column(children: [
         Text('Total Listening Time', style: tt.labelMedium?.copyWith(
-          color: Colors.white38, letterSpacing: 1.5, fontWeight: FontWeight.w500)),
+          color: cs.onSurface.withValues(alpha: 0.38), letterSpacing: 1.5, fontWeight: FontWeight.w500)),
         const SizedBox(height: 12),
         Row(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
           Text('${(hours * anim).round()}',
             style: tt.displayLarge?.copyWith(
-              fontWeight: FontWeight.w800, color: Colors.white, fontSize: 56, height: 1)),
+              fontWeight: FontWeight.w800, color: cs.onSurface, fontSize: 56, height: 1)),
           Padding(padding: const EdgeInsets.only(bottom: 8),
-            child: Text('h', style: tt.headlineSmall?.copyWith(color: Colors.white38, fontWeight: FontWeight.w300))),
+            child: Text('h', style: tt.headlineSmall?.copyWith(color: cs.onSurface.withValues(alpha: 0.38), fontWeight: FontWeight.w300))),
           const SizedBox(width: 8),
           Text('${(minutes * anim).round()}',
             style: tt.displayLarge?.copyWith(
-              fontWeight: FontWeight.w800, color: Colors.white, fontSize: 56, height: 1)),
+              fontWeight: FontWeight.w800, color: cs.onSurface, fontSize: 56, height: 1)),
           Padding(padding: const EdgeInsets.only(bottom: 8),
-            child: Text('m', style: tt.headlineSmall?.copyWith(color: Colors.white38, fontWeight: FontWeight.w300))),
+            child: Text('m', style: tt.headlineSmall?.copyWith(color: cs.onSurface.withValues(alpha: 0.38), fontWeight: FontWeight.w300))),
         ]),
         const SizedBox(height: 8),
         Text(_daysEquivalent(totalSeconds),
-          style: tt.bodySmall?.copyWith(color: Colors.white24)),
+          style: tt.bodySmall?.copyWith(color: cs.onSurface.withValues(alpha: 0.24))),
       ]),
     );
   }
@@ -253,41 +252,41 @@ class _StatsScreenState extends State<StatsScreen> with SingleTickerProviderStat
 
   // ─── STAT CARD ──────────────────────────────────────────────
 
-  Widget _statCard(TextTheme tt, IconData icon, Color color, String value, String label) {
+  Widget _statCard(TextTheme tt, ColorScheme cs, IconData icon, Color color, String value, String label) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
+        color: cs.onSurface.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        border: Border.all(color: cs.onSurface.withValues(alpha: 0.06)),
       ),
       child: Column(children: [
         Icon(icon, color: color.withValues(alpha: 0.8), size: 22),
         const SizedBox(height: 8),
         Text(value, style: tt.headlineSmall?.copyWith(
-          fontWeight: FontWeight.w800, color: Colors.white, height: 1)),
+          fontWeight: FontWeight.w800, color: cs.onSurface, height: 1)),
         const SizedBox(height: 4),
         Text(label, textAlign: TextAlign.center, style: tt.labelSmall?.copyWith(
-          color: Colors.white30, fontSize: 10, height: 1.2)),
+          color: cs.onSurface.withValues(alpha: 0.3), fontSize: 10, height: 1.2)),
       ]),
     );
   }
 
   // ─── PERIOD CARD ────────────────────────────────────────────
 
-  Widget _periodCard(TextTheme tt, String label, double seconds) {
+  Widget _periodCard(TextTheme tt, ColorScheme cs, String label, double seconds) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
+        color: cs.onSurface.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        border: Border.all(color: cs.onSurface.withValues(alpha: 0.06)),
       ),
       child: Column(children: [
         Text(_formatDuration(seconds), style: tt.titleMedium?.copyWith(
-          fontWeight: FontWeight.w700, color: Colors.white, height: 1)),
+          fontWeight: FontWeight.w700, color: cs.onSurface, height: 1)),
         const SizedBox(height: 4),
-        Text(label, style: tt.labelSmall?.copyWith(color: Colors.white30, fontSize: 10)),
+        Text(label, style: tt.labelSmall?.copyWith(color: cs.onSurface.withValues(alpha: 0.3), fontSize: 10)),
       ]),
     );
   }
@@ -303,9 +302,9 @@ class _StatsScreenState extends State<StatsScreen> with SingleTickerProviderStat
       height: 140,
       padding: const EdgeInsets.fromLTRB(0, 8, 0, 0),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
+        color: cs.onSurface.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        border: Border.all(color: cs.onSurface.withValues(alpha: 0.05)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -318,19 +317,19 @@ class _StatsScreenState extends State<StatsScreen> with SingleTickerProviderStat
               if (d.seconds > 0)
                 Padding(padding: const EdgeInsets.only(bottom: 4),
                   child: Text(_shortDuration(d.seconds), style: TextStyle(
-                    color: Colors.white30, fontSize: 9, fontWeight: FontWeight.w500))),
+                    color: cs.onSurface.withValues(alpha: 0.3), fontSize: 9, fontWeight: FontWeight.w500))),
               AnimatedContainer(
                 duration: const Duration(milliseconds: 600),
                 curve: Curves.easeOutCubic,
                 height: (ratio * 80).clamp(2.0, 80.0),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(4),
-                  color: isToday ? Colors.white.withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.15),
+                  color: isToday ? cs.onSurface.withValues(alpha: 0.5) : cs.onSurface.withValues(alpha: 0.15),
                 ),
               ),
               const SizedBox(height: 6),
               Text(d.label, style: TextStyle(
-                color: isToday ? Colors.white60 : Colors.white.withValues(alpha: 0.2),
+                color: isToday ? cs.onSurface.withValues(alpha: 0.6) : cs.onSurface.withValues(alpha: 0.2),
                 fontSize: 10, fontWeight: isToday ? FontWeight.w600 : FontWeight.w400)),
               const SizedBox(height: 8),
             ]),
@@ -342,7 +341,7 @@ class _StatsScreenState extends State<StatsScreen> with SingleTickerProviderStat
 
   // ─── HEAT MAP (30 days) ─────────────────────────────────────
 
-  Widget _heatMap(List<_DayData> data, TextTheme tt) {
+  Widget _heatMap(List<_DayData> data, TextTheme tt, ColorScheme cs) {
     final maxVal = data.map((d) => d.seconds).fold(0.0, (a, b) => a > b ? a : b);
 
     return Wrap(
@@ -356,8 +355,8 @@ class _StatsScreenState extends State<StatsScreen> with SingleTickerProviderStat
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(3),
               color: intensity > 0
-                  ? Colors.white.withValues(alpha: 0.08 + intensity * 0.4)
-                  : Colors.white.withValues(alpha: 0.03),
+                  ? cs.onSurface.withValues(alpha: 0.08 + intensity * 0.4)
+                  : cs.onSurface.withValues(alpha: 0.03),
             ),
           ),
         );
@@ -391,16 +390,16 @@ class _StatsScreenState extends State<StatsScreen> with SingleTickerProviderStat
       // Pick an icon based on client name
       final isAbsorb = clientName.toLowerCase().contains('absorb');
       final icon = _clientIcon(clientName);
-      final iconColor = _clientColor(clientName);
+      final iconColor = _clientColor(clientName, cs);
 
       return Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.04),
+            color: cs.onSurface.withValues(alpha: 0.04),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+            border: Border.all(color: cs.onSurface.withValues(alpha: 0.06)),
           ),
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             // App icon
@@ -420,10 +419,10 @@ class _StatsScreenState extends State<StatsScreen> with SingleTickerProviderStat
             // Title + author + app
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: tt.bodySmall?.copyWith(color: Colors.white70, fontWeight: FontWeight.w600)),
+                style: tt.bodySmall?.copyWith(color: cs.onSurface.withValues(alpha: 0.7), fontWeight: FontWeight.w600)),
               if (author.isNotEmpty)
                 Text(author, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: tt.labelSmall?.copyWith(color: Colors.white30, fontSize: 10)),
+                  style: tt.labelSmall?.copyWith(color: cs.onSurface.withValues(alpha: 0.3), fontSize: 10)),
               const SizedBox(height: 4),
               Row(children: [
                 isAbsorb
@@ -433,7 +432,7 @@ class _StatsScreenState extends State<StatsScreen> with SingleTickerProviderStat
                 Flexible(child: Text(
                   deviceStr.isNotEmpty ? '$appLabel · $deviceStr' : appLabel,
                   maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.2), fontSize: 9),
+                  style: TextStyle(color: cs.onSurface.withValues(alpha: 0.2), fontSize: 9),
                 )),
               ]),
             ])),
@@ -441,10 +440,10 @@ class _StatsScreenState extends State<StatsScreen> with SingleTickerProviderStat
             // Duration + time
             Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
               Text(_formatDuration(duration),
-                style: tt.labelSmall?.copyWith(color: Colors.white38, fontWeight: FontWeight.w600)),
+                style: tt.labelSmall?.copyWith(color: cs.onSurface.withValues(alpha: 0.38), fontWeight: FontWeight.w600)),
               if (updatedAt != null)
                 Text(_relativeDate(updatedAt),
-                  style: tt.labelSmall?.copyWith(color: Colors.white.withValues(alpha: 0.2), fontSize: 9)),
+                  style: tt.labelSmall?.copyWith(color: cs.onSurface.withValues(alpha: 0.2), fontSize: 9)),
             ]),
           ]),
         ),
@@ -463,14 +462,14 @@ class _StatsScreenState extends State<StatsScreen> with SingleTickerProviderStat
     return Icons.devices_rounded;
   }
 
-  Color _clientColor(String clientName) {
+  Color _clientColor(String clientName, ColorScheme cs) {
     final lower = clientName.toLowerCase();
     if (lower.contains('absorb')) return Colors.tealAccent;
     if (lower.contains('audiobookshelf') || lower.contains('abs')) return Colors.deepPurple;
     if (lower.contains('web') || lower.contains('browser')) return Colors.blue;
     if (lower.contains('ios') || lower.contains('apple')) return Colors.grey;
     if (lower.contains('android')) return Colors.green;
-    return Colors.white54;
+    return cs.onSurfaceVariant;
   }
 
   // ─── HELPERS ────────────────────────────────────────────────

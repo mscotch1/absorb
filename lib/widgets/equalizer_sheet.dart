@@ -50,12 +50,13 @@ class _EqualizerSheetContentState extends State<_EqualizerSheetContent> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     final accent = widget.accent;
 
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
+        color: Theme.of(context).bottomSheetTheme.backgroundColor,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         border: Border(top: BorderSide(color: accent.withValues(alpha: 0.2), width: 1)),
       ),
@@ -66,7 +67,7 @@ class _EqualizerSheetContentState extends State<_EqualizerSheetContent> {
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Container(
               width: 40, height: 4,
-              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+              decoration: BoxDecoration(color: cs.onSurface.withValues(alpha: 0.24), borderRadius: BorderRadius.circular(2)),
             ),
           ),
           // Header with toggle
@@ -76,7 +77,7 @@ class _EqualizerSheetContentState extends State<_EqualizerSheetContent> {
               children: [
                 Icon(Icons.equalizer_rounded, size: 22, color: accent),
                 const SizedBox(width: 10),
-                Text('Audio Enhancements', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w600, color: Colors.white)),
+                Text('Audio Enhancements', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w600, color: cs.onSurface)),
                 const Spacer(),
                 // Master toggle
                 Transform.scale(
@@ -100,7 +101,7 @@ class _EqualizerSheetContentState extends State<_EqualizerSheetContent> {
                 const SizedBox(height: 8),
                 // ── Presets ──
                 Text('PRESETS', style: tt.labelSmall?.copyWith(
-                  color: Colors.white30, letterSpacing: 1.5, fontWeight: FontWeight.w600)),
+                  color: cs.onSurface.withValues(alpha: 0.3), letterSpacing: 1.5, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 10),
                 Wrap(
                   spacing: 8, runSpacing: 8,
@@ -112,18 +113,18 @@ class _EqualizerSheetContentState extends State<_EqualizerSheetContent> {
                         duration: const Duration(milliseconds: 150),
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                         decoration: BoxDecoration(
-                          color: isActive ? accent.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.06),
+                          color: isActive ? accent.withValues(alpha: 0.2) : cs.onSurface.withValues(alpha: 0.06),
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
-                            color: isActive ? accent.withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.1),
+                            color: isActive ? accent.withValues(alpha: 0.5) : cs.onSurface.withValues(alpha: 0.1),
                           ),
                         ),
                         child: Text(
                           name[0].toUpperCase() + name.substring(1),
                           style: TextStyle(
                             color: _eq.enabled
-                                ? (isActive ? accent : Colors.white70)
-                                : Colors.white24,
+                                ? (isActive ? accent : cs.onSurface.withValues(alpha: 0.7))
+                                : cs.onSurface.withValues(alpha: 0.24),
                             fontSize: 12,
                             fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                           ),
@@ -153,7 +154,7 @@ class _EqualizerSheetContentState extends State<_EqualizerSheetContent> {
 
                 // ── EQ Bands ──
                 Text('EQUALIZER', style: tt.labelSmall?.copyWith(
-                  color: Colors.white30, letterSpacing: 1.5, fontWeight: FontWeight.w600)),
+                  color: cs.onSurface.withValues(alpha: 0.3), letterSpacing: 1.5, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 12),
                 SizedBox(
                   height: 200,
@@ -178,7 +179,7 @@ class _EqualizerSheetContentState extends State<_EqualizerSheetContent> {
 
                 // ── Audio Effects ──
                 Text('EFFECTS', style: tt.labelSmall?.copyWith(
-                  color: Colors.white30, letterSpacing: 1.5, fontWeight: FontWeight.w600)),
+                  color: cs.onSurface.withValues(alpha: 0.3), letterSpacing: 1.5, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 12),
 
                 // Bass Boost
@@ -220,9 +221,9 @@ class _EqualizerSheetContentState extends State<_EqualizerSheetContent> {
                   child: TextButton.icon(
                     onPressed: _eq.enabled ? () => _eq.resetAll() : null,
                     icon: Icon(Icons.refresh_rounded, size: 18,
-                      color: _eq.enabled ? Colors.white38 : Colors.white12),
+                      color: _eq.enabled ? cs.onSurfaceVariant : cs.onSurface.withValues(alpha: 0.12)),
                     label: Text('Reset All', style: TextStyle(
-                      color: _eq.enabled ? Colors.white38 : Colors.white12,
+                      color: _eq.enabled ? cs.onSurfaceVariant : cs.onSurface.withValues(alpha: 0.12),
                       fontSize: 13)),
                   ),
                 ),
@@ -259,6 +260,7 @@ class _EQBandSlider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final eq = EqualizerService();
     final label = eq.freqLabel(frequency);
     final normalized = ((level - minLevel) / (maxLevel - minLevel)).clamp(0.0, 1.0);
@@ -267,7 +269,7 @@ class _EQBandSlider extends StatelessWidget {
       children: [
         Text('${level >= 0 ? "+" : ""}${level.toStringAsFixed(0)}',
           style: TextStyle(
-            color: enabled ? Colors.white54 : Colors.white.withValues(alpha: 0.2),
+            color: enabled ? cs.onSurfaceVariant : cs.onSurface.withValues(alpha: 0.2),
             fontSize: 10, fontWeight: FontWeight.w600)),
         const SizedBox(height: 4),
         Expanded(
@@ -278,9 +280,9 @@ class _EQBandSlider extends StatelessWidget {
                 trackHeight: 4,
                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
                 overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-                activeTrackColor: enabled ? accent : Colors.white24,
-                inactiveTrackColor: Colors.white.withValues(alpha: 0.08),
-                thumbColor: enabled ? accent : Colors.white30,
+                activeTrackColor: enabled ? accent : cs.onSurface.withValues(alpha: 0.24),
+                inactiveTrackColor: cs.onSurface.withValues(alpha: 0.08),
+                thumbColor: enabled ? accent : cs.onSurface.withValues(alpha: 0.3),
                 overlayColor: accent.withValues(alpha: 0.15),
               ),
               child: Slider(
@@ -294,7 +296,7 @@ class _EQBandSlider extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(label, style: TextStyle(
-          color: enabled ? Colors.white38 : Colors.white.withValues(alpha: 0.15),
+          color: enabled ? cs.onSurfaceVariant : cs.onSurface.withValues(alpha: 0.15),
           fontSize: 10, fontWeight: FontWeight.w500)),
       ],
     );
@@ -322,20 +324,21 @@ class _EffectRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
+        color: cs.onSurface.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: enabled ? accent.withValues(alpha: 0.7) : Colors.white.withValues(alpha: 0.2)),
+          Icon(icon, size: 18, color: enabled ? accent.withValues(alpha: 0.7) : cs.onSurface.withValues(alpha: 0.2)),
           const SizedBox(width: 10),
           SizedBox(
             width: 72,
             child: Text(label, style: TextStyle(
-              color: enabled ? Colors.white70 : Colors.white24,
+              color: enabled ? cs.onSurface.withValues(alpha: 0.7) : cs.onSurface.withValues(alpha: 0.24),
               fontSize: 12, fontWeight: FontWeight.w500)),
           ),
           Expanded(
@@ -344,9 +347,9 @@ class _EffectRow extends StatelessWidget {
                 trackHeight: 3,
                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
                 overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-                activeTrackColor: enabled ? accent : Colors.white24,
-                inactiveTrackColor: Colors.white.withValues(alpha: 0.06),
-                thumbColor: enabled ? accent : Colors.white30,
+                activeTrackColor: enabled ? accent : cs.onSurface.withValues(alpha: 0.24),
+                inactiveTrackColor: cs.onSurface.withValues(alpha: 0.06),
+                thumbColor: enabled ? accent : cs.onSurface.withValues(alpha: 0.3),
                 overlayColor: accent.withValues(alpha: 0.15),
               ),
               child: Slider(
@@ -362,7 +365,7 @@ class _EffectRow extends StatelessWidget {
             child: Text('${(value * 100).round()}%',
               textAlign: TextAlign.right,
               style: TextStyle(
-                color: enabled ? Colors.white38 : Colors.white.withValues(alpha: 0.15),
+                color: enabled ? cs.onSurfaceVariant : cs.onSurface.withValues(alpha: 0.15),
                 fontSize: 11, fontWeight: FontWeight.w600)),
           ),
         ],

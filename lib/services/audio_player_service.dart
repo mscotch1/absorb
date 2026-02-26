@@ -126,6 +126,11 @@ class PlayerSettings {
   static Future<bool> getLoggingEnabled() => _get('loggingEnabled', false);
   static Future<void> setLoggingEnabled(bool value) => _set('loggingEnabled', value);
 
+  // ── Appearance ──
+
+  static Future<String> getThemeMode() => _get('themeMode', 'dark');
+  static Future<void> setThemeMode(String value) => _set('themeMode', value);
+
   /// Check if an item has no audio content.
   /// For minified responses (library list), duration == 0 means no audio files.
   /// For full responses (detail sheet), we also check ebookFile + audioFiles.

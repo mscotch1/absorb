@@ -210,15 +210,16 @@ class _EpisodeListSheetState extends State<EpisodeListSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     final lib = context.watch<LibraryProvider>();
     final coverUrl = _coverUrl;
 
     return Container(
       clipBehavior: Clip.antiAlias,
-      decoration: const BoxDecoration(
-        color: Color(0xFF111111),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Stack(children: [
         // Blurred cover background
@@ -240,16 +241,16 @@ class _EpisodeListSheetState extends State<EpisodeListSheet> {
         Positioned.fill(child: DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(
           begin: Alignment.topCenter, end: Alignment.bottomCenter,
           colors: [
-            const Color(0xFF111111).withValues(alpha: 0.6),
-            const Color(0xFF111111).withValues(alpha: 0.85),
-            const Color(0xFF111111),
+            Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.6),
+            Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.85),
+            Theme.of(context).scaffoldBackgroundColor,
           ],
         )))),
         // Content
         Column(children: [
           // Drag handle
           Center(child: Container(width: 40, height: 4, margin: const EdgeInsets.only(top: 8, bottom: 4),
-            decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
+            decoration: BoxDecoration(color: cs.onSurface.withValues(alpha: 0.24), borderRadius: BorderRadius.circular(2)))),
 
           // ── Header (non-scrollable) ──
           Padding(
@@ -257,11 +258,11 @@ class _EpisodeListSheetState extends State<EpisodeListSheet> {
             child: Column(children: [
               // Show title (centered)
               Text(_title, textAlign: TextAlign.center,
-                style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w700, color: Colors.white)),
+                style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w700, color: cs.onSurface)),
               if (_author.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Text(_author, textAlign: TextAlign.center,
-                  style: tt.bodyMedium?.copyWith(color: Colors.white60)),
+                  style: tt.bodyMedium?.copyWith(color: cs.onSurface.withValues(alpha: 0.6))),
               ],
 
               // Description
@@ -273,7 +274,7 @@ class _EpisodeListSheetState extends State<EpisodeListSheet> {
                     maxLines: _descriptionExpanded ? 100 : 2,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
-                    style: tt.bodySmall?.copyWith(color: Colors.white38, height: 1.4)),
+                    style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, height: 1.4)),
                 ),
               ],
 
@@ -313,15 +314,15 @@ class _EpisodeListSheetState extends State<EpisodeListSheet> {
                       return GestureDetector(
                         child: Container(height: 44,
                           decoration: BoxDecoration(
-                            color: Colors.greenAccent.withValues(alpha: 0.06),
+                            color: (Theme.of(context).brightness == Brightness.dark ? Colors.greenAccent : Colors.green.shade700).withValues(alpha: 0.06),
                             borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.15)),
+                            border: Border.all(color: (Theme.of(context).brightness == Brightness.dark ? Colors.greenAccent : Colors.green.shade700).withValues(alpha: 0.15)),
                           ),
                           child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                            Icon(Icons.download_done_rounded, size: 16, color: Colors.greenAccent.withValues(alpha: 0.7)),
+                            Icon(Icons.download_done_rounded, size: 16, color: (Theme.of(context).brightness == Brightness.dark ? Colors.greenAccent : Colors.green.shade700).withValues(alpha: 0.7)),
                             const SizedBox(width: 6),
                             Text('All Episodes Downloaded',
-                              style: TextStyle(color: Colors.greenAccent.withValues(alpha: 0.7), fontSize: 12, fontWeight: FontWeight.w500)),
+                              style: TextStyle(color: (Theme.of(context).brightness == Brightness.dark ? Colors.greenAccent : Colors.green.shade700).withValues(alpha: 0.7), fontSize: 12, fontWeight: FontWeight.w500)),
                           ])),
                       );
                     }
@@ -331,9 +332,9 @@ class _EpisodeListSheetState extends State<EpisodeListSheet> {
                       child: Container(height: 44,
                         clipBehavior: Clip.antiAlias,
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.06),
+                          color: cs.onSurface.withValues(alpha: 0.06),
                           borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                          border: Border.all(color: cs.onSurface.withValues(alpha: 0.1)),
                         ),
                         child: Stack(children: [
                           if (anyActive)
@@ -352,7 +353,7 @@ class _EpisodeListSheetState extends State<EpisodeListSheet> {
                                 child: CircularProgressIndicator(strokeWidth: 2,
                                   color: Theme.of(context).colorScheme.primary))
                             else
-                              const Icon(Icons.download_rounded, size: 16, color: Colors.white54),
+                              Icon(Icons.download_rounded, size: 16, color: cs.onSurfaceVariant),
                             const SizedBox(width: 6),
                             Text(
                               anyActive
@@ -361,7 +362,7 @@ class _EpisodeListSheetState extends State<EpisodeListSheet> {
                                       ? 'Download Remaining (${_episodes.length - downloaded})'
                                       : 'Download All Episodes',
                               style: TextStyle(
-                                color: anyActive ? Theme.of(context).colorScheme.primary : Colors.white54,
+                                color: anyActive ? Theme.of(context).colorScheme.primary : cs.onSurfaceVariant,
                                 fontSize: 12, fontWeight: FontWeight.w500)),
                           ])),
                         ]),
@@ -375,7 +376,7 @@ class _EpisodeListSheetState extends State<EpisodeListSheet> {
               const SizedBox(height: 16),
               Align(
                 alignment: Alignment.centerLeft,
-                child: Text('Episodes', style: tt.titleSmall?.copyWith(color: Colors.white54, fontWeight: FontWeight.w600)),
+                child: Text('Episodes', style: tt.titleSmall?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w600)),
               ),
               const SizedBox(height: 4),
             ]),
@@ -384,15 +385,15 @@ class _EpisodeListSheetState extends State<EpisodeListSheet> {
           // ── Scrollable episode list ──
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white24))
+                ? Center(child: CircularProgressIndicator(strokeWidth: 2, color: cs.onSurface.withValues(alpha: 0.24)))
                 : _episodes.isEmpty
                     ? Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.podcasts_rounded, size: 48, color: Colors.white.withValues(alpha: 0.15)),
+                            Icon(Icons.podcasts_rounded, size: 48, color: cs.onSurface.withValues(alpha: 0.15)),
                             const SizedBox(height: 12),
-                            Text('No episodes found', style: tt.bodyMedium?.copyWith(color: Colors.white38)),
+                            Text('No episodes found', style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
                           ],
                         ),
                       )
@@ -419,15 +420,16 @@ class _EpisodeListSheetState extends State<EpisodeListSheet> {
   }
 
   Widget _chip(IconData icon, String text) {
+    final cs = Theme.of(context).colorScheme;
     return Container(
       constraints: const BoxConstraints(maxWidth: 200),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08))),
+      decoration: BoxDecoration(color: cs.onSurface.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cs.onSurface.withValues(alpha: 0.08))),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 12, color: Colors.white38), const SizedBox(width: 4),
+        Icon(icon, size: 12, color: cs.onSurfaceVariant), const SizedBox(width: 4),
         Flexible(child: Text(text, overflow: TextOverflow.ellipsis, maxLines: 1,
-          style: const TextStyle(color: Colors.white54, fontSize: 11)))]));
+          style: TextStyle(color: cs.onSurfaceVariant, fontSize: 11)))]));
   }
 }
 
@@ -634,9 +636,9 @@ class _EpisodeDetailSheetState extends State<EpisodeDetailSheet> {
 
     return Container(
       clipBehavior: Clip.antiAlias,
-      decoration: const BoxDecoration(
-        color: Color(0xFF111111),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Stack(children: [
         // Blurred cover background
@@ -658,9 +660,9 @@ class _EpisodeDetailSheetState extends State<EpisodeDetailSheet> {
         Positioned.fill(child: DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(
           begin: Alignment.topCenter, end: Alignment.bottomCenter,
           colors: [
-            const Color(0xFF111111).withValues(alpha: 0.6),
-            const Color(0xFF111111).withValues(alpha: 0.85),
-            const Color(0xFF111111),
+            Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.6),
+            Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.85),
+            Theme.of(context).scaffoldBackgroundColor,
           ],
         )))),
         // Content
@@ -670,17 +672,17 @@ class _EpisodeDetailSheetState extends State<EpisodeDetailSheet> {
           children: [
             // Drag handle
             Center(child: Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
+              decoration: BoxDecoration(color: cs.onSurface.withValues(alpha: 0.24), borderRadius: BorderRadius.circular(2)))),
 
             // Episode title (centered)
             Text(_episodeTitle, textAlign: TextAlign.center,
-              style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w700, color: Colors.white)),
+              style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w700, color: cs.onSurface)),
             const SizedBox(height: 4),
 
             // Show title
             if (_showTitle.isNotEmpty)
               Text(_showTitle, textAlign: TextAlign.center,
-                style: tt.bodyMedium?.copyWith(color: Colors.white60)),
+                style: tt.bodyMedium?.copyWith(color: cs.onSurface.withValues(alpha: 0.6))),
 
             const SizedBox(height: 12),
 
@@ -689,13 +691,13 @@ class _EpisodeDetailSheetState extends State<EpisodeDetailSheet> {
               ClipRRect(borderRadius: BorderRadius.circular(3),
                 child: LinearProgressIndicator(
                   value: progress.clamp(0.0, 1.0), minHeight: 4,
-                  backgroundColor: Colors.white.withValues(alpha: 0.1),
+                  backgroundColor: cs.onSurface.withValues(alpha: 0.1),
                   valueColor: AlwaysStoppedAnimation(
                     isFinished ? cs.primary.withValues(alpha: 0.4) : cs.primary),
                 )),
               const SizedBox(height: 4),
               Text('${(progress * 100).toStringAsFixed(1)}% complete', textAlign: TextAlign.center,
-                style: tt.labelSmall?.copyWith(color: Colors.white38)),
+                style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
               const SizedBox(height: 12),
             ],
 
@@ -732,7 +734,7 @@ class _EpisodeDetailSheetState extends State<EpisodeDetailSheet> {
                   if (downloaded) {
                     icon = Icons.download_done_rounded;
                     label = 'Downloaded';
-                    color = Colors.greenAccent.withValues(alpha: 0.7);
+                    color = (Theme.of(context).brightness == Brightness.dark ? Colors.greenAccent : Colors.green.shade700).withValues(alpha: 0.7);
                   } else if (downloading) {
                     icon = Icons.downloading_rounded;
                     label = '${(dlProgress * 100).toStringAsFixed(0)}%';
@@ -740,7 +742,7 @@ class _EpisodeDetailSheetState extends State<EpisodeDetailSheet> {
                   } else {
                     icon = Icons.download_outlined;
                     label = 'Download';
-                    color = Colors.white54;
+                    color = cs.onSurfaceVariant;
                   }
 
                   return GestureDetector(
@@ -749,9 +751,9 @@ class _EpisodeDetailSheetState extends State<EpisodeDetailSheet> {
                       height: 36,
                       clipBehavior: Clip.antiAlias,
                       decoration: BoxDecoration(
-                        color: downloaded ? Colors.greenAccent.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.06),
+                        color: downloaded ? (Theme.of(context).brightness == Brightness.dark ? Colors.greenAccent : Colors.green.shade700).withValues(alpha: 0.06) : cs.onSurface.withValues(alpha: 0.06),
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: downloaded ? Colors.greenAccent.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.08)),
+                        border: Border.all(color: downloaded ? (Theme.of(context).brightness == Brightness.dark ? Colors.greenAccent : Colors.green.shade700).withValues(alpha: 0.15) : cs.onSurface.withValues(alpha: 0.08)),
                       ),
                       child: Stack(children: [
                         if (downloading)
@@ -780,21 +782,21 @@ class _EpisodeDetailSheetState extends State<EpisodeDetailSheet> {
                 child: Container(
                   height: 36,
                   decoration: BoxDecoration(
-                    color: isFinished ? Colors.green.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.06),
+                    color: isFinished ? Colors.green.withValues(alpha: 0.06) : cs.onSurface.withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: isFinished ? Colors.green.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.08)),
+                    border: Border.all(color: isFinished ? Colors.green.withValues(alpha: 0.15) : cs.onSurface.withValues(alpha: 0.08)),
                   ),
                   child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                     Icon(
                       isFinished ? Icons.check_circle_rounded : Icons.check_circle_outline_rounded,
                       size: 16,
-                      color: isFinished ? Colors.green : Colors.white54,
+                      color: isFinished ? Colors.green : cs.onSurfaceVariant,
                     ),
                     const SizedBox(width: 6),
                     Text(
                       isFinished ? 'Finished' : 'Mark Finished',
                       style: TextStyle(
-                        color: isFinished ? Colors.green : Colors.white54,
+                        color: isFinished ? Colors.green : cs.onSurfaceVariant,
                         fontSize: 12, fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -839,14 +841,14 @@ class _EpisodeDetailSheetState extends State<EpisodeDetailSheet> {
             // Description
             if (_cleanDescription.isNotEmpty) ...[
               const SizedBox(height: 16),
-              Text('About This Episode', style: tt.titleSmall?.copyWith(color: Colors.white54, fontWeight: FontWeight.w600)),
+              Text('About This Episode', style: tt.titleSmall?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w600)),
               const SizedBox(height: 6),
               GestureDetector(
                 onTap: () => setState(() => _descriptionExpanded = !_descriptionExpanded),
                 child: Text(_cleanDescription,
                   maxLines: _descriptionExpanded ? 200 : 4,
                   overflow: TextOverflow.ellipsis,
-                  style: tt.bodySmall?.copyWith(color: Colors.white70, height: 1.5)),
+                  style: tt.bodySmall?.copyWith(color: cs.onSurface.withValues(alpha: 0.7), height: 1.5)),
               ),
               if (_cleanDescription.length > 200)
                 Padding(
@@ -867,15 +869,16 @@ class _EpisodeDetailSheetState extends State<EpisodeDetailSheet> {
   }
 
   Widget _chip(IconData icon, String text) {
+    final cs = Theme.of(context).colorScheme;
     return Container(
       constraints: const BoxConstraints(maxWidth: 200),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08))),
+      decoration: BoxDecoration(color: cs.onSurface.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cs.onSurface.withValues(alpha: 0.08))),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 12, color: Colors.white38), const SizedBox(width: 4),
+        Icon(icon, size: 12, color: cs.onSurfaceVariant), const SizedBox(width: 4),
         Flexible(child: Text(text, overflow: TextOverflow.ellipsis, maxLines: 1,
-          style: const TextStyle(color: Colors.white54, fontSize: 11)))]));
+          style: TextStyle(color: cs.onSurfaceVariant, fontSize: 11)))]));
   }
 }
 
@@ -996,7 +999,7 @@ class _EpisodeRowState extends State<_EpisodeRow> {
                           fontWeight: FontWeight.w500,
                           color: isFinished
                               ? cs.onSurfaceVariant.withValues(alpha: 0.5)
-                              : Colors.white,
+                              : cs.onSurface,
                         ),
                         maxLines: 2, overflow: TextOverflow.ellipsis,
                       ),
@@ -1052,7 +1055,7 @@ class _EpisodeRowState extends State<_EpisodeRow> {
                           return Padding(
                             padding: const EdgeInsets.all(8),
                             child: Icon(Icons.download_done_rounded, size: 20,
-                              color: Colors.greenAccent.withValues(alpha: 0.7)),
+                              color: (Theme.of(context).brightness == Brightness.dark ? Colors.greenAccent : Colors.green.shade700).withValues(alpha: 0.7)),
                           );
                         }
                         if (downloading) {

@@ -68,7 +68,7 @@ class _AdminScreenState extends State<AdminScreen> {
     final tt = Theme.of(context).textTheme;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0E0E0E),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: _loading
             ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
@@ -323,9 +323,8 @@ class _AdminScreenState extends State<AdminScreen> {
   Future<void> _matchLib(String id, String name) async {
     final api = context.read<AuthProvider>().apiService; if (api == null) return;
     final yes = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
-      backgroundColor: const Color(0xFF2A2A2A),
-      title: const Text('Match All Items?', style: TextStyle(color: Colors.white)),
-      content: Text('Match metadata for all items in $name? This can take a while.', style: const TextStyle(color: Colors.white70)),
+      title: const Text('Match All Items?'),
+      content: Text('Match metadata for all items in $name? This can take a while.'),
       actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
         TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Match'))],
     ));

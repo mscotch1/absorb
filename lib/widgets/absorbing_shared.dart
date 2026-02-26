@@ -28,13 +28,15 @@ class _DownloadWideButtonState extends State<DownloadWideButton> {
     final downloaded = _dl.isDownloaded(widget.itemId);
     final progress = _dl.downloadProgress(widget.itemId);
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final dlGreen = isDark ? Colors.greenAccent.withValues(alpha: 0.7) : Colors.green.shade700;
     final IconData icon;
     final String label;
     final Color color;
     if (downloaded) {
       icon = Icons.download_done_rounded;
       label = 'Saved';
-      color = Colors.greenAccent.withValues(alpha: 0.7);
+      color = dlGreen;
     } else if (downloading) {
       icon = Icons.downloading_rounded;
       label = '${(progress * 100).toStringAsFixed(0)}%';
@@ -42,7 +44,7 @@ class _DownloadWideButtonState extends State<DownloadWideButton> {
     } else {
       icon = Icons.download_outlined;
       label = 'Download';
-      color = Colors.white54;
+      color = Theme.of(context).colorScheme.onSurfaceVariant;
     }
 
     return GestureDetector(
@@ -51,9 +53,9 @@ class _DownloadWideButtonState extends State<DownloadWideButton> {
         height: 36,
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          color: downloaded ? Colors.greenAccent.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.06),
+          color: downloaded ? dlGreen.withValues(alpha: 0.06) : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: downloaded ? Colors.greenAccent.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.08)),
+          border: Border.all(color: downloaded ? dlGreen.withValues(alpha: 0.15) : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.08)),
         ),
         child: Stack(children: [
           if (downloading)
@@ -85,9 +87,8 @@ class _DownloadWideButtonState extends State<DownloadWideButton> {
     if (api == null) return;
     if (_dl.isDownloaded(widget.itemId)) {
       showDialog(context: context, builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF2A2A2A),
-        title: const Text('Remove download?', style: TextStyle(color: Colors.white)),
-        content: const Text('This will be removed from your device.', style: TextStyle(color: Colors.white70)),
+        title: const Text('Remove download?'),
+        content: const Text('This will be removed from your device.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           TextButton(onPressed: () { _dl.deleteDownload(widget.itemId); Navigator.pop(ctx); },

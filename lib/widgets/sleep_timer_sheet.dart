@@ -41,6 +41,7 @@ class _SleepTimerSheetState extends State<SleepTimerSheet> {
   @override
   Widget build(BuildContext context) {
     final tt = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
     final accent = widget.accent;
 
     return ListenableBuilder(
@@ -54,15 +55,15 @@ class _SleepTimerSheetState extends State<SleepTimerSheet> {
         return Container(
             padding: EdgeInsets.fromLTRB(20, 16, 20, 24 + navBarPad),
             decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1A),
+              color: Theme.of(context).bottomSheetTheme.backgroundColor,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
               border: Border(top: BorderSide(color: accent.withValues(alpha: 0.2), width: 1)),
             ),
             child: SingleChildScrollView(
               child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: cs.onSurface.withValues(alpha: 0.24), borderRadius: BorderRadius.circular(2))),
             const SizedBox(height: 16),
-            Text('Sleep Timer', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w600, color: Colors.white)),
+            Text('Sleep Timer', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w600, color: cs.onSurface)),
             const SizedBox(height: 16),
 
             if (isActive)
@@ -71,7 +72,7 @@ class _SleepTimerSheetState extends State<SleepTimerSheet> {
               // Tab bar
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.06),
+                  color: cs.onSurface.withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 padding: const EdgeInsets.all(3),
@@ -88,7 +89,7 @@ class _SleepTimerSheetState extends State<SleepTimerSheet> {
               else _buildChapterTab(accent, tt),
 
               const SizedBox(height: 16),
-              Container(height: 0.5, color: Colors.white.withValues(alpha: 0.08)),
+              Container(height: 0.5, color: cs.onSurface.withValues(alpha: 0.08)),
               const SizedBox(height: 12),
 
               // Shake toggle
@@ -102,6 +103,7 @@ class _SleepTimerSheetState extends State<SleepTimerSheet> {
   }
 
   Widget _buildActiveState(SleepTimerService sleep, Color accent, TextTheme tt) {
+    final cs = Theme.of(context).colorScheme;
     final isTime = sleep.mode == SleepTimerMode.time;
 
     String countdownLabel;
@@ -127,7 +129,7 @@ class _SleepTimerSheetState extends State<SleepTimerSheet> {
           child: LinearProgressIndicator(
             value: sleep.timeProgress,
             minHeight: 4,
-            backgroundColor: Colors.white.withValues(alpha: 0.08),
+            backgroundColor: cs.onSurface.withValues(alpha: 0.08),
             valueColor: AlwaysStoppedAnimation(accent.withValues(alpha: 0.6)),
           ),
         ),
@@ -140,7 +142,7 @@ class _SleepTimerSheetState extends State<SleepTimerSheet> {
       const SizedBox(height: 20),
 
       // Quick add buttons
-      Text('Add more time', style: TextStyle(color: Colors.white38, fontSize: 12)),
+      Text('Add more time', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12)),
       const SizedBox(height: 10),
       if (isTime)
         Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.center, children: [
@@ -163,8 +165,8 @@ class _SleepTimerSheetState extends State<SleepTimerSheet> {
         icon: const Icon(Icons.close_rounded, size: 18),
         label: const Text('Cancel timer'),
         style: OutlinedButton.styleFrom(
-          foregroundColor: Colors.white54,
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+          foregroundColor: cs.onSurfaceVariant,
+          side: BorderSide(color: cs.onSurface.withValues(alpha: 0.12)),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
         onPressed: () {
@@ -174,13 +176,14 @@ class _SleepTimerSheetState extends State<SleepTimerSheet> {
       )),
 
       const SizedBox(height: 12),
-      Container(height: 0.5, color: Colors.white.withValues(alpha: 0.08)),
+      Container(height: 0.5, color: cs.onSurface.withValues(alpha: 0.08)),
       const SizedBox(height: 12),
       _buildShakeToggle(accent, tt),
     ]);
   }
 
   Widget _tab(String label, IconData icon, int index, Color accent) {
+    final cs = Theme.of(context).colorScheme;
     final selected = _tabIndex == index;
     return Expanded(
       child: GestureDetector(
@@ -193,10 +196,10 @@ class _SleepTimerSheetState extends State<SleepTimerSheet> {
             borderRadius: BorderRadius.circular(10),
           ),
           child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Icon(icon, size: 15, color: selected ? accent : Colors.white38),
+            Icon(icon, size: 15, color: selected ? accent : cs.onSurfaceVariant),
             const SizedBox(width: 6),
             Text(label, style: TextStyle(
-              color: selected ? accent : Colors.white38,
+              color: selected ? accent : cs.onSurfaceVariant,
               fontSize: 12, fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
             )),
           ]),
@@ -206,6 +209,7 @@ class _SleepTimerSheetState extends State<SleepTimerSheet> {
   }
 
   Widget _buildTimerTab(Color accent, TextTheme tt) {
+    final cs = Theme.of(context).colorScheme;
     return Column(children: [
       // Custom slider
       Text('${_customMinutes.round()} min',
@@ -215,7 +219,7 @@ class _SleepTimerSheetState extends State<SleepTimerSheet> {
       SliderTheme(
         data: SliderThemeData(
           activeTrackColor: accent,
-          inactiveTrackColor: Colors.white.withValues(alpha: 0.1),
+          inactiveTrackColor: cs.onSurface.withValues(alpha: 0.1),
           thumbColor: accent,
           overlayColor: accent.withValues(alpha: 0.1),
           trackHeight: 4,
@@ -228,9 +232,9 @@ class _SleepTimerSheetState extends State<SleepTimerSheet> {
       ),
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: const [
-          Text('1m', style: TextStyle(color: Colors.white30, fontSize: 11)),
-          Text('120m', style: TextStyle(color: Colors.white30, fontSize: 11)),
+        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text('1m', style: TextStyle(color: cs.onSurface.withValues(alpha: 0.3), fontSize: 11)),
+          Text('120m', style: TextStyle(color: cs.onSurface.withValues(alpha: 0.3), fontSize: 11)),
         ]),
       ),
       const SizedBox(height: 12),
@@ -244,7 +248,7 @@ class _SleepTimerSheetState extends State<SleepTimerSheet> {
       const SizedBox(height: 16),
       // Start button
       SizedBox(width: double.infinity, height: 44, child: FilledButton(
-        style: FilledButton.styleFrom(backgroundColor: accent, foregroundColor: Colors.black,
+        style: FilledButton.styleFrom(backgroundColor: accent, foregroundColor: cs.surface,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
         onPressed: () {
           SleepTimerService().setTimeSleep(Duration(minutes: _customMinutes.round()));
@@ -257,6 +261,7 @@ class _SleepTimerSheetState extends State<SleepTimerSheet> {
   }
 
   Widget _buildChapterTab(Color accent, TextTheme tt) {
+    final cs = Theme.of(context).colorScheme;
     return Column(children: [
       Text('$_customChapters ${_customChapters == 1 ? 'chapter' : 'chapters'}',
         style: TextStyle(color: accent, fontSize: 28, fontWeight: FontWeight.w700)),
@@ -282,7 +287,7 @@ class _SleepTimerSheetState extends State<SleepTimerSheet> {
       const SizedBox(height: 16),
       // Start button
       SizedBox(width: double.infinity, height: 44, child: FilledButton(
-        style: FilledButton.styleFrom(backgroundColor: accent, foregroundColor: Colors.black,
+        style: FilledButton.styleFrom(backgroundColor: accent, foregroundColor: cs.surface,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
         onPressed: () {
           SleepTimerService().setChapterSleep(_customChapters);
@@ -295,16 +300,17 @@ class _SleepTimerSheetState extends State<SleepTimerSheet> {
   }
 
   Widget _buildShakeToggle(Color accent, TextTheme tt) {
+    final cs = Theme.of(context).colorScheme;
     return Row(children: [
-      Icon(Icons.vibration_rounded, size: 18, color: _shakeEnabled ? accent : Colors.white24),
+      Icon(Icons.vibration_rounded, size: 18, color: _shakeEnabled ? accent : cs.onSurface.withValues(alpha: 0.24)),
       const SizedBox(width: 10),
       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('Shake to add time',
-          style: TextStyle(color: _shakeEnabled ? Colors.white70 : Colors.white38, fontSize: 13, fontWeight: FontWeight.w500)),
+          style: TextStyle(color: _shakeEnabled ? cs.onSurface.withValues(alpha: 0.7) : cs.onSurfaceVariant, fontSize: 13, fontWeight: FontWeight.w500)),
         Text(_shakeEnabled
             ? (_tabIndex == 0 ? 'Adds $_shakeAddMinutes min' : 'Adds 1 chapter')
             : 'Off',
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 11)),
+          style: TextStyle(color: cs.onSurface.withValues(alpha: 0.3), fontSize: 11)),
       ])),
       SizedBox(
         height: 28,
@@ -321,32 +327,34 @@ class _SleepTimerSheetState extends State<SleepTimerSheet> {
   }
 
   Widget _circleButton(IconData icon, Color accent, VoidCallback? onTap) {
+    final cs = Theme.of(context).colorScheme;
     final enabled = onTap != null;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         width: 48, height: 48,
         decoration: BoxDecoration(
-          color: enabled ? accent.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.04),
+          color: enabled ? accent.withValues(alpha: 0.15) : cs.onSurface.withValues(alpha: 0.04),
           shape: BoxShape.circle,
-          border: Border.all(color: enabled ? accent.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.06)),
+          border: Border.all(color: enabled ? accent.withValues(alpha: 0.3) : cs.onSurface.withValues(alpha: 0.06)),
         ),
-        child: Icon(icon, color: enabled ? accent : Colors.white24, size: 24),
+        child: Icon(icon, color: enabled ? accent : cs.onSurface.withValues(alpha: 0.24), size: 24),
       ),
     );
   }
 
   Widget _presetChip(Color accent, String label, bool active, VoidCallback onTap) {
+    final cs = Theme.of(context).colorScheme;
     return GestureDetector(onTap: onTap, child: AnimatedContainer(
       duration: const Duration(milliseconds: 150),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: active ? accent.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.06),
+        color: active ? accent.withValues(alpha: 0.2) : cs.onSurface.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: active ? accent.withValues(alpha: 0.4) : Colors.white.withValues(alpha: 0.1)),
+        border: Border.all(color: active ? accent.withValues(alpha: 0.4) : cs.onSurface.withValues(alpha: 0.1)),
       ),
       child: Text(label, style: TextStyle(
-        color: active ? accent : Colors.white54,
+        color: active ? accent : cs.onSurfaceVariant,
         fontSize: 13, fontWeight: active ? FontWeight.w600 : FontWeight.w400)),
     ));
   }

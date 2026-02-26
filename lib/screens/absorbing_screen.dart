@@ -276,16 +276,20 @@ class _AbsorbingScreenState extends State<AbsorbingScreen> {
       books = books.where((b) => dl.isDownloaded(b['id'] as String? ?? '')).toList();
     }
 
+    final muted = cs.onSurfaceVariant;
+    final subtleBg = cs.onSurface.withValues(alpha: 0.06);
+    final subtleBorder = cs.onSurface.withValues(alpha: 0.08);
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: Column(
           children: [
             // ── Header ──
             AbsorbPageHeader(
               title: 'Absorbing',
-              brandingColor: Colors.white38,
-              titleColor: Colors.white,
+              brandingColor: muted,
+              titleColor: cs.onSurface,
               padding: const EdgeInsets.fromLTRB(20, 12, 12, 0),
               actions: [
                 // Offline mode toggle
@@ -300,22 +304,22 @@ class _AbsorbingScreenState extends State<AbsorbingScreen> {
                     curve: Curves.easeOutCubic,
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
-                      color: effectiveOffline ? Colors.orange.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.06),
+                      color: effectiveOffline ? Colors.orange.withValues(alpha: 0.15) : subtleBg,
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: effectiveOffline ? Colors.orange.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.08)),
+                      border: Border.all(color: effectiveOffline ? Colors.orange.withValues(alpha: 0.3) : subtleBorder),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
                           effectiveOffline ? Icons.airplanemode_active_rounded : Icons.airplanemode_inactive_rounded,
-                          size: 14, color: effectiveOffline ? Colors.orange : Colors.white38,
+                          size: 14, color: effectiveOffline ? Colors.orange : muted,
                         ),
                         const SizedBox(width: 4),
                         Text(
                           effectiveOffline ? 'Offline' : 'Online',
                           style: TextStyle(
-                            color: effectiveOffline ? Colors.orange : Colors.white38,
+                            color: effectiveOffline ? Colors.orange : muted,
                             fontSize: 11, fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -342,26 +346,26 @@ class _AbsorbingScreenState extends State<AbsorbingScreen> {
                       duration: const Duration(milliseconds: 200),
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.06),
+                        color: subtleBg,
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                        border: Border.all(color: subtleBorder),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           if (_isSyncing) ...[
-                            const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white38)),
+                            SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5, color: muted)),
                             const SizedBox(width: 6),
-                            const Text('Syncing…', style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.w500)),
+                            Text('Syncing…', style: TextStyle(color: muted, fontSize: 11, fontWeight: FontWeight.w500)),
                           ] else if (_player.hasBook) ...[
-                            const Icon(Icons.stop_rounded, size: 14, color: Colors.white38),
+                            Icon(Icons.stop_rounded, size: 14, color: muted),
                             const SizedBox(width: 4),
-                            const Text('Stop & Sync', style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.w500)),
+                            Text('Stop & Sync', style: TextStyle(color: muted, fontSize: 11, fontWeight: FontWeight.w500)),
                           ] else ...[
-                            const Icon(Icons.sync_rounded, size: 14, color: Colors.white38),
+                            Icon(Icons.sync_rounded, size: 14, color: muted),
                             const SizedBox(width: 4),
-                            const Text('Sync', style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.w500)),
+                            Text('Sync', style: TextStyle(color: muted, fontSize: 11, fontWeight: FontWeight.w500)),
                           ],
                         ],
                       ),
@@ -379,17 +383,17 @@ class _AbsorbingScreenState extends State<AbsorbingScreen> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.06),
+                            color: subtleBg,
                             borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                            border: Border.all(color: subtleBorder),
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.stop_rounded, size: 14, color: Colors.white38),
-                              SizedBox(width: 4),
-                              Text('Stop', style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.w500)),
+                              Icon(Icons.stop_rounded, size: 14, color: muted),
+                              const SizedBox(width: 4),
+                              Text('Stop', style: TextStyle(color: muted, fontSize: 11, fontWeight: FontWeight.w500)),
                             ],
                           ),
                         ),
@@ -407,7 +411,7 @@ class _AbsorbingScreenState extends State<AbsorbingScreen> {
             // ── Cards (refreshable) ──
             Expanded(
               child: lib.isLoading
-                  ? const Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white24))
+                  ? Center(child: CircularProgressIndicator(strokeWidth: 2, color: cs.onSurface.withValues(alpha: 0.24)))
                   : books.isEmpty
                       ? _emptyState(cs, tt, effectiveOffline)
                       : PageView.builder(
@@ -477,17 +481,17 @@ class _AbsorbingScreenState extends State<AbsorbingScreen> {
         children: [
           Icon(isOffline ? Icons.cloud_off_rounded
               : isPod ? Icons.podcasts_rounded : Icons.headphones_rounded,
-            size: 64, color: Colors.white.withValues(alpha: 0.15)),
+            size: 64, color: cs.onSurface.withValues(alpha: 0.15)),
           const SizedBox(height: 16),
           Text(isOffline
               ? (isPod ? 'No downloaded episodes' : 'No downloaded books')
               : (isPod ? 'Nothing playing yet' : 'Nothing absorbing yet'),
-            style: tt.titleMedium?.copyWith(color: Colors.white38)),
+            style: tt.titleMedium?.copyWith(color: cs.onSurfaceVariant)),
           const SizedBox(height: 8),
           Text(isOffline
               ? (isPod ? 'Download episodes to listen offline' : 'Download books to listen offline')
               : (isPod ? 'Start an episode from the Shows tab' : 'Start a book from the Library tab'),
-            style: tt.bodySmall?.copyWith(color: Colors.white24)),
+            style: tt.bodySmall?.copyWith(color: cs.onSurface.withValues(alpha: 0.24))),
         ],
       ),
     );
@@ -503,6 +507,7 @@ class _PageDots extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return ListenableBuilder(
       listenable: controller,
       builder: (_, __) {
@@ -518,7 +523,7 @@ class _PageDots extends StatelessWidget {
               width: active ? 20 : 6,
               height: 6,
               decoration: BoxDecoration(
-                color: active ? Colors.white54 : Colors.white.withValues(alpha: 0.15),
+                color: active ? cs.onSurface.withValues(alpha: 0.54) : cs.onSurface.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(3),
               ),
             );

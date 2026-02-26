@@ -169,7 +169,7 @@ class AbsorbingCardState extends State<AbsorbingCard> with AutomaticKeepAliveCli
 
   void _onCoverLoaded(ImageProvider provider) {
     if (_coverScheme != null) return;
-    ColorScheme.fromImageProvider(provider: provider, brightness: Brightness.dark)
+    ColorScheme.fromImageProvider(provider: provider, brightness: Theme.of(context).brightness)
         .then((s) {
           if (mounted) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -236,6 +236,7 @@ class AbsorbingCardState extends State<AbsorbingCard> with AutomaticKeepAliveCli
     final cs = _coverScheme ?? Theme.of(context).colorScheme;
     final accent = cs.primary;
     final bgDark = cs.surface;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final lib = context.watch<LibraryProvider>();
     final mediaHeaders = lib.mediaHeaders;
@@ -300,7 +301,7 @@ class AbsorbingCardState extends State<AbsorbingCard> with AutomaticKeepAliveCli
                       return Opacity(
                         opacity: 0.3,
                         child: Image.file(File(_coverUrl!), fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(color: Colors.black)),
+                          errorBuilder: (_, __, ___) => Container(color: isDark ? Colors.black : Colors.white)),
                       );
                     })
                   : CachedNetworkImage(
@@ -314,8 +315,8 @@ class AbsorbingCardState extends State<AbsorbingCard> with AutomaticKeepAliveCli
                           child: Image(image: provider, fit: BoxFit.cover),
                         );
                       },
-                      placeholder: (_, __) => Container(color: Colors.black),
-                      errorWidget: (_, __, ___) => Container(color: Colors.black),
+                      placeholder: (_, __) => Container(color: isDark ? Colors.black : Colors.white),
+                      errorWidget: (_, __, ___) => Container(color: isDark ? Colors.black : Colors.white),
                     ),
             ),
           // Layer 2: Scrim
@@ -325,11 +326,17 @@ class AbsorbingCardState extends State<AbsorbingCard> with AutomaticKeepAliveCli
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withValues(alpha: 0.3),
-                    Colors.black.withValues(alpha: 0.6),
-                    Colors.black.withValues(alpha: 0.85),
-                  ],
+                  colors: isDark
+                    ? [
+                        Colors.black.withValues(alpha: 0.3),
+                        Colors.black.withValues(alpha: 0.6),
+                        Colors.black.withValues(alpha: 0.85),
+                      ]
+                    : [
+                        Colors.white.withValues(alpha: 0.4),
+                        Colors.white.withValues(alpha: 0.7),
+                        Colors.white.withValues(alpha: 0.9),
+                      ],
                 ),
               ),
             ),
@@ -345,16 +352,16 @@ class AbsorbingCardState extends State<AbsorbingCard> with AutomaticKeepAliveCli
                   children: [
                     Text('${(bookProgress * 100).clamp(0, 100).toStringAsFixed(1)}%',
                       style: tt.labelMedium?.copyWith(
-                        color: Colors.white.withValues(alpha: 0.95),
+                        color: isDark ? Colors.white.withValues(alpha: 0.95) : Colors.black.withValues(alpha: 0.85),
                         fontWeight: FontWeight.w800, fontSize: 15,
-                        shadows: [Shadow(color: Colors.black.withValues(alpha: 0.6), blurRadius: 4)],
+                        shadows: [Shadow(color: isDark ? Colors.black.withValues(alpha: 0.6) : Colors.white.withValues(alpha: 0.6), blurRadius: 4)],
                       )),
                     if (totalChapters > 0 && !_isPodcastEpisode)
                       Text('Ch ${(chapterIdx + 1).clamp(1, totalChapters)} / $totalChapters',
                         style: tt.labelMedium?.copyWith(
-                          color: Colors.white.withValues(alpha: 0.85),
+                          color: isDark ? Colors.white.withValues(alpha: 0.85) : Colors.black.withValues(alpha: 0.75),
                           fontWeight: FontWeight.w700, fontSize: 14,
-                          shadows: [Shadow(color: Colors.black.withValues(alpha: 0.6), blurRadius: 4)],
+                          shadows: [Shadow(color: isDark ? Colors.black.withValues(alpha: 0.6) : Colors.white.withValues(alpha: 0.6), blurRadius: 4)],
                         )),
                   ],
                 ),
@@ -387,7 +394,7 @@ class AbsorbingCardState extends State<AbsorbingCard> with AutomaticKeepAliveCli
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(16),
                             boxShadow: [
-                              BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 20, spreadRadius: -2, offset: const Offset(0, 6)),
+                              BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.15), blurRadius: 20, spreadRadius: -2, offset: const Offset(0, 6)),
                               BoxShadow(color: accent.withValues(alpha: 0.15), blurRadius: 30, spreadRadius: -5),
                             ],
                           ),
@@ -472,7 +479,7 @@ class AbsorbingCardState extends State<AbsorbingCard> with AutomaticKeepAliveCli
                                       child: Column(
                                         mainAxisAlignment: MainAxisAlignment.center,
                                         children: [
-                                          Icon(Icons.check_circle_rounded, size: 32, color: Colors.green.shade400),
+                                          Icon(Icons.check_circle_rounded, size: 32, color: isDark ? Colors.green.shade400 : Colors.green.shade700),
                                           const SizedBox(height: 6),
                                           const Text('Finished',
                                             style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
@@ -589,15 +596,15 @@ class AbsorbingCardState extends State<AbsorbingCard> with AutomaticKeepAliveCli
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                             decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.08),
+                              color: cs.onSurface.withValues(alpha: 0.08),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.more_horiz_rounded, size: 18, color: Colors.white54),
+                                Icon(Icons.more_horiz_rounded, size: 18, color: cs.onSurface.withValues(alpha: 0.54)),
                                 const SizedBox(width: 4),
-                                Text('More', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.white54)),
+                                Text('More', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: cs.onSurface.withValues(alpha: 0.54))),
                               ],
                             ),
                           ),
@@ -659,10 +666,13 @@ class AbsorbingCardState extends State<AbsorbingCard> with AutomaticKeepAliveCli
     return '${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
   }
 
-  Widget _coverPlaceholder() => Container(
-    color: Colors.white.withValues(alpha: 0.05),
-    child: Center(child: Icon(Icons.headphones_rounded, size: 48, color: Colors.white.withValues(alpha: 0.15))),
-  );
+  Widget _coverPlaceholder() {
+    final cs2 = Theme.of(context).colorScheme;
+    return Container(
+      color: cs2.onSurface.withValues(alpha: 0.05),
+      child: Center(child: Icon(Icons.headphones_rounded, size: 48, color: cs2.onSurface.withValues(alpha: 0.15))),
+    );
+  }
 
   Future<void> _startPlayback() async {
     if (_isStarting) return;
@@ -729,14 +739,14 @@ class AbsorbingCardState extends State<AbsorbingCard> with AutomaticKeepAliveCli
         expand: false, initialChildSize: 0.6, maxChildSize: 0.9,
         builder: (_, sc) => Container(
           decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
+            color: Theme.of(context).bottomSheetTheme.backgroundColor,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
             border: Border(top: BorderSide(color: accent.withValues(alpha: 0.2), width: 1)),
           ),
           child: Column(children: [
             Padding(padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
-            Text('Chapters', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w600, color: Colors.white)),
+              child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.24), borderRadius: BorderRadius.circular(2)))),
+            Text('Chapters', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             Expanded(child: ListView.builder(
               controller: sc, itemCount: chapters.length,
@@ -753,14 +763,14 @@ class AbsorbingCardState extends State<AbsorbingCard> with AutomaticKeepAliveCli
                   dense: true, selected: isCurrent,
                   selectedTileColor: accent.withValues(alpha: 0.1),
                   leading: SizedBox(width: 28, child: Text('${i + 1}', textAlign: TextAlign.center,
-                    style: tt.labelMedium?.copyWith(fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w400, color: isCurrent ? accent : Colors.white38))),
+                    style: tt.labelMedium?.copyWith(fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w400, color: isCurrent ? accent : Theme.of(context).colorScheme.onSurfaceVariant))),
                   title: Text(chTitle, maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: tt.bodyMedium?.copyWith(fontWeight: isCurrent ? FontWeight.w600 : FontWeight.w400, color: isCurrent ? Colors.white : Colors.white70)),
+                    style: tt.bodyMedium?.copyWith(fontWeight: isCurrent ? FontWeight.w600 : FontWeight.w400, color: isCurrent ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7))),
                   trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                     Text('$pct%', style: tt.labelSmall?.copyWith(
-                      color: isCurrent ? accent.withValues(alpha: 0.7) : Colors.white24, fontSize: 10, fontWeight: FontWeight.w600)),
+                      color: isCurrent ? accent.withValues(alpha: 0.7) : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.24), fontSize: 10, fontWeight: FontWeight.w600)),
                     const SizedBox(width: 8),
-                    Text(_fmtDur(end - start), style: tt.labelSmall?.copyWith(color: Colors.white38)),
+                    Text(_fmtDur(end - start), style: tt.labelSmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                   ]),
                   onTap: _isActive ? () {
                     widget.player.seekTo(Duration(seconds: start.round()));
@@ -783,21 +793,21 @@ class AbsorbingCardState extends State<AbsorbingCard> with AutomaticKeepAliveCli
         expand: false, initialChildSize: 0.6, maxChildSize: 0.9,
         builder: (_, sc) => Container(
           decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
+            color: Theme.of(context).bottomSheetTheme.backgroundColor,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
             border: Border(top: BorderSide(color: accent.withValues(alpha: 0.2), width: 1)),
           ),
           child: Column(children: [
             Padding(padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
+              child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.24), borderRadius: BorderRadius.circular(2)))),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(children: [
                 const Spacer(),
-                Text('Playback History', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w600, color: Colors.white)),
+                Text('Playback History', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
                 const Spacer(),
                 IconButton(
-                  icon: const Icon(Icons.delete_outline_rounded, size: 20, color: Colors.white38),
+                  icon: Icon(Icons.delete_outline_rounded, size: 20, color: Theme.of(context).colorScheme.onSurfaceVariant),
                   onPressed: () async {
                     await PlaybackHistoryService().clearHistory(_itemId);
                     Navigator.pop(ctx);
@@ -812,7 +822,7 @@ class AbsorbingCardState extends State<AbsorbingCard> with AutomaticKeepAliveCli
               builder: (ctx, snap) {
                 if (!snap.hasData) return const Center(child: CircularProgressIndicator(strokeWidth: 2));
                 final events = snap.data!;
-                if (events.isEmpty) return Center(child: Text('No history yet', style: tt.bodyMedium?.copyWith(color: Colors.white38)));
+                if (events.isEmpty) return Center(child: Text('No history yet', style: tt.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)));
                 return ListView.builder(
                   controller: sc, itemCount: events.length,
                   itemBuilder: (_, i) {
@@ -822,9 +832,9 @@ class AbsorbingCardState extends State<AbsorbingCard> with AutomaticKeepAliveCli
                     return ListTile(
                       dense: true,
                       leading: Icon(_historyIcon(e.type), size: 18, color: accent.withValues(alpha: 0.7)),
-                      title: Text(e.label, style: tt.bodySmall?.copyWith(color: Colors.white70)),
-                      subtitle: Text('at $posLabel', style: tt.labelSmall?.copyWith(color: Colors.white38)),
-                      trailing: Text(timeAgo, style: tt.labelSmall?.copyWith(color: Colors.white30)),
+                      title: Text(e.label, style: tt.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7))),
+                      subtitle: Text('at $posLabel', style: tt.labelSmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                      trailing: Text(timeAgo, style: tt.labelSmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3))),
                       onTap: _isActive ? () {
                         widget.player.seekTo(Duration(seconds: e.positionSeconds.round()));
                         Navigator.pop(ctx);
@@ -847,7 +857,7 @@ class AbsorbingCardState extends State<AbsorbingCard> with AutomaticKeepAliveCli
       backgroundColor: Colors.transparent,
       builder: (ctx) => Container(
         decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1A),
+          color: Theme.of(context).bottomSheetTheme.backgroundColor,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           border: Border(top: BorderSide(color: accent.withValues(alpha: 0.2), width: 1)),
         ),
@@ -858,7 +868,7 @@ class AbsorbingCardState extends State<AbsorbingCard> with AutomaticKeepAliveCli
               mainAxisSize: MainAxisSize.min,
               children: [
                 // Drag handle
-                Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+                Container(width: 40, height: 4, decoration: BoxDecoration(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.24), borderRadius: BorderRadius.circular(2))),
                 const SizedBox(height: 16),
                 // Details option
                 MoreMenuItem(
@@ -912,7 +922,7 @@ class AbsorbingCardState extends State<AbsorbingCard> with AutomaticKeepAliveCli
                         if (cast.isCasting && cast.castingItemId == _itemId) {
                           showModalBottomSheet(
                             context: context,
-                            backgroundColor: const Color(0xFF1A1A1A),
+                            backgroundColor: Theme.of(context).bottomSheetTheme.backgroundColor,
                             shape: const RoundedRectangleBorder(
                               borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
                             ),

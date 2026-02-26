@@ -149,7 +149,7 @@ class _BookDetailSheetContentState extends State<_BookDetailSheetContent> {
     final tt = Theme.of(context).textTheme;
     return Container(
       clipBehavior: Clip.antiAlias,
-      decoration: const BoxDecoration(color: Color(0xFF111111), borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      decoration: BoxDecoration(color: Theme.of(context).scaffoldBackgroundColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
       child: Stack(children: [
         if (_coverUrl != null)
           Positioned.fill(
@@ -167,12 +167,12 @@ class _BookDetailSheetContentState extends State<_BookDetailSheetContent> {
           ),
         Positioned.fill(child: DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(
           begin: Alignment.topCenter, end: Alignment.bottomCenter,
-          colors: [const Color(0xFF111111).withValues(alpha: 0.6), const Color(0xFF111111).withValues(alpha: 0.85), const Color(0xFF111111)],
+          colors: [Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.6), Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.85), Theme.of(context).scaffoldBackgroundColor],
         )))),
         _isLoading
-            ? const Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white24))
+            ? Center(child: CircularProgressIndicator(strokeWidth: 2, color: cs.onSurface.withValues(alpha: 0.24)))
             : _item == null
-                ? Center(child: Text('Failed to load', style: tt.bodyMedium?.copyWith(color: Colors.white38)))
+                ? Center(child: Text('Failed to load', style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant)))
                 : AnimatedOpacity(
                     opacity: 1.0, duration: const Duration(milliseconds: 300),
                     child: _buildContent(context, cs, tt)),
@@ -207,12 +207,12 @@ class _BookDetailSheetContentState extends State<_BookDetailSheetContent> {
 
     return ListView(controller: widget.scrollController, padding: EdgeInsets.fromLTRB(20, 8, 20, 32 + MediaQuery.of(context).viewPadding.bottom), children: [
       Center(child: Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 16),
-        decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
-      Text(title, textAlign: TextAlign.center, style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w700, color: Colors.white)),
+        decoration: BoxDecoration(color: cs.onSurface.withValues(alpha: 0.24), borderRadius: BorderRadius.circular(2)))),
+      Text(title, textAlign: TextAlign.center, style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w700, color: cs.onSurface)),
       const SizedBox(height: 4),
-      Text(authorName, textAlign: TextAlign.center, style: tt.bodyMedium?.copyWith(color: Colors.white60)),
+      Text(authorName, textAlign: TextAlign.center, style: tt.bodyMedium?.copyWith(color: cs.onSurface.withValues(alpha: 0.6))),
       if (narrator.isNotEmpty) ...[const SizedBox(height: 2),
-        Text('Narrated by $narrator', textAlign: TextAlign.center, style: tt.bodySmall?.copyWith(color: Colors.white38))],
+        Text('Narrated by $narrator', textAlign: TextAlign.center, style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant))],
       // ─── AUDIBLE RATING (space always reserved) ─────────
       const SizedBox(height: 8),
       SizedBox(
@@ -222,9 +222,9 @@ class _BookDetailSheetContentState extends State<_BookDetailSheetContent> {
               ..._buildStars((_rating!['rating'] as num).toDouble(), cs),
               const SizedBox(width: 6),
               Text((_rating!['rating'] as num).toStringAsFixed(1),
-                style: tt.labelLarge?.copyWith(fontWeight: FontWeight.w600, color: Colors.white70)),
+                style: tt.labelLarge?.copyWith(fontWeight: FontWeight.w600, color: cs.onSurface.withValues(alpha: 0.7))),
               const SizedBox(width: 4),
-              Text('on Audible', style: tt.labelSmall?.copyWith(color: Colors.white38)),
+              Text('on Audible', style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
             ])
           : null,
       ),
@@ -232,10 +232,10 @@ class _BookDetailSheetContentState extends State<_BookDetailSheetContent> {
       if (progress > 0 && !isFinished) ...[
         ClipRRect(borderRadius: BorderRadius.circular(3),
           child: LinearProgressIndicator(value: progress.clamp(0.0, 1.0), minHeight: 4,
-            backgroundColor: Colors.white.withValues(alpha: 0.1), valueColor: AlwaysStoppedAnimation(cs.primary))),
+            backgroundColor: cs.onSurface.withValues(alpha: 0.1), valueColor: AlwaysStoppedAnimation(cs.primary))),
         const SizedBox(height: 4),
         Text('${(progress * 100).toStringAsFixed(1)}% complete', textAlign: TextAlign.center,
-          style: tt.labelSmall?.copyWith(color: Colors.white38)),
+          style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
         const SizedBox(height: 12),
       ],
       if (isEbookOnly)
@@ -271,21 +271,21 @@ class _BookDetailSheetContentState extends State<_BookDetailSheetContent> {
           child: Container(
             height: 36,
             decoration: BoxDecoration(
-              color: isFinished ? Colors.green.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.06),
+              color: isFinished ? Colors.green.withValues(alpha: 0.06) : cs.onSurface.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: isFinished ? Colors.green.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.08)),
+              border: Border.all(color: isFinished ? Colors.green.withValues(alpha: 0.15) : cs.onSurface.withValues(alpha: 0.08)),
             ),
             child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
               Icon(
                 isFinished ? Icons.check_circle_rounded : Icons.check_circle_outline_rounded,
                 size: 16,
-                color: isFinished ? Colors.green : Colors.white54,
+                color: isFinished ? Colors.green : cs.onSurfaceVariant,
               ),
               const SizedBox(width: 6),
               Text(
                 isFinished ? 'Fully Absorbed' : 'Fully Absorb',
                 style: TextStyle(
-                  color: isFinished ? Colors.green : Colors.white54,
+                  color: isFinished ? Colors.green : cs.onSurfaceVariant,
                   fontSize: 12, fontWeight: FontWeight.w500,
                 ),
               ),
@@ -300,18 +300,18 @@ class _BookDetailSheetContentState extends State<_BookDetailSheetContent> {
           child: Container(
             height: 36,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.06),
+              color: cs.onSurface.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+              border: Border.all(color: cs.onSurface.withValues(alpha: 0.08)),
             ),
             child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
               _ebookLoading
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white54))
-                  : const Icon(Icons.menu_book_rounded, size: 16, color: Colors.white54),
+                  ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: cs.onSurfaceVariant))
+                  : Icon(Icons.menu_book_rounded, size: 16, color: cs.onSurfaceVariant),
               const SizedBox(width: 6),
               Text(
                 _ebookLoading ? 'Opening…' : 'Open ePub in Another App',
-                style: const TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w500),
+                style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w500),
               ),
             ]),
           ),
@@ -356,22 +356,22 @@ class _BookDetailSheetContentState extends State<_BookDetailSheetContent> {
             ));
         })],
       if (desc.isNotEmpty) ...[const SizedBox(height: 16),
-        Text('About', style: tt.titleSmall?.copyWith(color: Colors.white54, fontWeight: FontWeight.w600)),
+        Text('About', style: tt.titleSmall?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w600)),
         const SizedBox(height: 6),
-        Text(desc, style: tt.bodySmall?.copyWith(color: Colors.white70, height: 1.5))],
+        Text(desc, style: tt.bodySmall?.copyWith(color: cs.onSurface.withValues(alpha: 0.7), height: 1.5))],
       if (chapters.isNotEmpty) ...[const SizedBox(height: 16),
         GestureDetector(onTap: () => setState(() => _chaptersExpanded = !_chaptersExpanded),
           child: Row(children: [
-            Text('Chapters (${chapters.length})', style: tt.titleSmall?.copyWith(color: Colors.white54, fontWeight: FontWeight.w600)),
-            const Spacer(), Icon(_chaptersExpanded ? Icons.expand_less : Icons.expand_more, color: Colors.white38, size: 20)])),
+            Text('Chapters (${chapters.length})', style: tt.titleSmall?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w600)),
+            const Spacer(), Icon(_chaptersExpanded ? Icons.expand_less : Icons.expand_more, color: cs.onSurface.withValues(alpha: 0.3), size: 20)])),
         if (_chaptersExpanded) ...[const SizedBox(height: 8),
           ...chapters.asMap().entries.map((e) {
             final ch = e.value as Map<String, dynamic>;
             return Padding(padding: const EdgeInsets.symmetric(vertical: 3),
               child: Row(children: [
-                SizedBox(width: 28, child: Text('${e.key + 1}', style: tt.labelSmall?.copyWith(color: Colors.white30))),
-                Expanded(child: Text(ch['title'] as String? ?? 'Chapter ${e.key + 1}', maxLines: 1, overflow: TextOverflow.ellipsis, style: tt.bodySmall?.copyWith(color: Colors.white60))),
-                Text(_fmtDur(((ch['end'] as num?)?.toDouble() ?? 0) - ((ch['start'] as num?)?.toDouble() ?? 0)), style: tt.labelSmall?.copyWith(color: Colors.white30)),
+                SizedBox(width: 28, child: Text('${e.key + 1}', style: tt.labelSmall?.copyWith(color: cs.onSurface.withValues(alpha: 0.3)))),
+                Expanded(child: Text(ch['title'] as String? ?? 'Chapter ${e.key + 1}', maxLines: 1, overflow: TextOverflow.ellipsis, style: tt.bodySmall?.copyWith(color: cs.onSurface.withValues(alpha: 0.6)))),
+                Text(_fmtDur(((ch['end'] as num?)?.toDouble() ?? 0) - ((ch['start'] as num?)?.toDouble() ?? 0)), style: tt.labelSmall?.copyWith(color: cs.onSurface.withValues(alpha: 0.3))),
               ]));
           })]],
       // ─── Metadata lookup (bottom of sheet) ─────────────────
@@ -403,24 +403,26 @@ class _BookDetailSheetContentState extends State<_BookDetailSheetContent> {
   }
 
   Widget _sheetBtn({required IconData icon, required String label, required VoidCallback onTap}) {
+    final cs = Theme.of(context).colorScheme;
     return GestureDetector(onTap: onTap, child: Container(height: 44,
-      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1))),
+      decoration: BoxDecoration(color: cs.onSurface.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: cs.onSurface.withValues(alpha: 0.1))),
       child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Icon(icon, size: 16, color: Colors.white54), const SizedBox(width: 6),
-        Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w500))])));
+        Icon(icon, size: 16, color: cs.onSurfaceVariant), const SizedBox(width: 6),
+        Text(label, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w500))])));
   }
 
   Widget _chip(IconData icon, String text) {
+    final cs = Theme.of(context).colorScheme;
     return Container(
       constraints: const BoxConstraints(maxWidth: 200),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08))),
+      decoration: BoxDecoration(color: cs.onSurface.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cs.onSurface.withValues(alpha: 0.08))),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 12, color: Colors.white38), const SizedBox(width: 4),
+        Icon(icon, size: 12, color: cs.onSurface.withValues(alpha: 0.3)), const SizedBox(width: 4),
         Flexible(child: Text(text, overflow: TextOverflow.ellipsis, maxLines: 1,
-          style: const TextStyle(color: Colors.white54, fontSize: 11)))]));
+          style: TextStyle(color: cs.onSurfaceVariant, fontSize: 11)))]));
   }
 
   String _fmtDur(double s) {
@@ -439,7 +441,7 @@ class _BookDetailSheetContentState extends State<_BookDetailSheetContent> {
       } else if (i == fullStars && hasHalf) {
         stars.add(Icon(Icons.star_half_rounded, size: 16, color: cs.primary));
       } else {
-        stars.add(Icon(Icons.star_outline_rounded, size: 16, color: Colors.white24));
+        stars.add(Icon(Icons.star_outline_rounded, size: 16, color: cs.onSurface.withValues(alpha: 0.24)));
       }
     }
     return stars;

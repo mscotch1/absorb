@@ -23,6 +23,17 @@ import 'screens/login_screen.dart';
 import 'screens/app_shell.dart';
 import 'widgets/absorb_wave_icon.dart';
 
+/// Global notifier so any widget (e.g. settings) can change the theme instantly.
+final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.dark);
+
+ThemeMode parseThemeMode(String value) {
+  switch (value) {
+    case 'light': return ThemeMode.light;
+    case 'system': return ThemeMode.system;
+    default: return ThemeMode.dark;
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -32,13 +43,9 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
 
-  // Dark status bar to match Absorb theme
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
-    systemNavigationBarColor: Colors.black,
-    systemNavigationBarIconBrightness: Brightness.light,
-  ));
+  // Load saved theme preference
+  final savedTheme = await PlayerSettings.getThemeMode();
+  themeNotifier.value = parseThemeMode(savedTheme);
 
   // Load device info for server identification
   await ApiService.initDeviceId();
@@ -87,103 +94,170 @@ class AbsorbApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DynamicColorBuilder(
-      builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
-        // Absorb is dark-first — use dynamic dark colors or our custom palette
-        ColorScheme darkScheme;
-        if (darkDynamic != null) {
-          darkScheme = darkDynamic.harmonized();
-        } else {
-          darkScheme = ColorScheme.fromSeed(
-            seedColor: const Color(0xFF7C6FBF), // deep muted purple
-            brightness: Brightness.dark,
-          );
-        }
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: themeNotifier,
+      builder: (context, currentMode, _) {
+        // Set system chrome to match active theme
+        final isDark = currentMode == ThemeMode.dark ||
+            (currentMode == ThemeMode.system &&
+                WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+                    Brightness.dark);
+        SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+          systemNavigationBarColor: isDark ? Colors.black : const Color(0xFFF5F5F5),
+          systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        ));
 
-        // Light scheme for users who prefer it
-        ColorScheme lightScheme;
-        if (lightDynamic != null) {
-          lightScheme = lightDynamic.harmonized();
-        } else {
-          lightScheme = ColorScheme.fromSeed(
-            seedColor: const Color(0xFF7C6FBF),
-            brightness: Brightness.light,
-          );
-        }
+        return DynamicColorBuilder(
+          builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
+            // Absorb is dark-first — use dynamic dark colors or our custom palette
+            ColorScheme darkScheme;
+            if (darkDynamic != null) {
+              darkScheme = darkDynamic.harmonized();
+            } else {
+              darkScheme = ColorScheme.fromSeed(
+                seedColor: const Color(0xFF7C6FBF), // deep muted purple
+                brightness: Brightness.dark,
+              );
+            }
 
-        // Smooth page transition theme
-        const pageTransition = PageTransitionsTheme(
-          builders: {
-            TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-            TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+            // Light scheme for users who prefer it
+            ColorScheme lightScheme;
+            if (lightDynamic != null) {
+              lightScheme = lightDynamic.harmonized();
+            } else {
+              lightScheme = ColorScheme.fromSeed(
+                seedColor: const Color(0xFF7C6FBF),
+                brightness: Brightness.light,
+              );
+            }
+
+            // Smooth page transition theme
+            const pageTransition = PageTransitionsTheme(
+              builders: {
+                TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+                TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+              },
+            );
+
+            return MaterialApp(
+              title: 'Absorb',
+              debugShowCheckedModeBanner: false,
+              themeMode: currentMode,
+              theme: ThemeData(
+                useMaterial3: true,
+                colorScheme: lightScheme,
+                scaffoldBackgroundColor: lightScheme.surface,
+                cardTheme: CardThemeData(
+                  color: lightScheme.surfaceContainerHigh,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                navigationBarTheme: NavigationBarThemeData(
+                  backgroundColor: lightScheme.surface,
+                  indicatorColor: lightScheme.primary.withValues(alpha: 0.15),
+                  labelTextStyle: WidgetStatePropertyAll(
+                    TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: lightScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                appBarTheme: AppBarTheme(
+                  backgroundColor: lightScheme.surface,
+                  surfaceTintColor: Colors.transparent,
+                  scrolledUnderElevation: 0,
+                ),
+                searchBarTheme: SearchBarThemeData(
+                  backgroundColor: WidgetStatePropertyAll(
+                    lightScheme.surfaceContainerHigh,
+                  ),
+                  elevation: const WidgetStatePropertyAll(0),
+                  shape: WidgetStatePropertyAll(
+                    RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                ),
+                bottomSheetTheme: BottomSheetThemeData(
+                  backgroundColor: lightScheme.surfaceContainerLow,
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                  ),
+                ),
+                snackBarTheme: SnackBarThemeData(
+                  backgroundColor: lightScheme.inverseSurface,
+                  contentTextStyle: TextStyle(color: lightScheme.onInverseSurface),
+                  actionTextColor: lightScheme.inversePrimary,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                pageTransitionsTheme: pageTransition,
+              ),
+              darkTheme: ThemeData(
+                useMaterial3: true,
+                colorScheme: darkScheme,
+                scaffoldBackgroundColor: const Color(0xFF0E0E0E),
+                cardTheme: CardThemeData(
+                  color: darkScheme.surfaceContainerHigh,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                navigationBarTheme: NavigationBarThemeData(
+                  backgroundColor: const Color(0xFF0E0E0E),
+                  indicatorColor: darkScheme.primary.withValues(alpha: 0.15),
+                  labelTextStyle: WidgetStatePropertyAll(
+                    TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: darkScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                appBarTheme: AppBarTheme(
+                  backgroundColor: const Color(0xFF0E0E0E),
+                  surfaceTintColor: Colors.transparent,
+                  scrolledUnderElevation: 0,
+                ),
+                searchBarTheme: SearchBarThemeData(
+                  backgroundColor: WidgetStatePropertyAll(
+                    darkScheme.surfaceContainerHigh,
+                  ),
+                  elevation: const WidgetStatePropertyAll(0),
+                  shape: WidgetStatePropertyAll(
+                    RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                ),
+                bottomSheetTheme: const BottomSheetThemeData(
+                  backgroundColor: Color(0xFF1A1A1A),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                  ),
+                ),
+                snackBarTheme: SnackBarThemeData(
+                  backgroundColor: darkScheme.surfaceContainerHighest,
+                  contentTextStyle: TextStyle(color: darkScheme.onSurface),
+                  actionTextColor: darkScheme.primary,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                pageTransitionsTheme: pageTransition,
+              ),
+              home: const AuthGate(),
+            );
           },
-        );
-
-        return MaterialApp(
-          title: 'Absorb',
-          debugShowCheckedModeBanner: false,
-          themeMode: ThemeMode.dark, // Absorb: dark by default
-          theme: ThemeData(
-            useMaterial3: true,
-            colorScheme: lightScheme,
-            pageTransitionsTheme: pageTransition,
-          ),
-          darkTheme: ThemeData(
-            useMaterial3: true,
-            colorScheme: darkScheme,
-            scaffoldBackgroundColor: const Color(0xFF0E0E0E),
-            cardTheme: CardThemeData(
-              color: darkScheme.surfaceContainerHigh,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-            ),
-            navigationBarTheme: NavigationBarThemeData(
-              backgroundColor: const Color(0xFF0E0E0E),
-              indicatorColor: darkScheme.primary.withValues(alpha: 0.15),
-              labelTextStyle: WidgetStatePropertyAll(
-                TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: darkScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-            appBarTheme: AppBarTheme(
-              backgroundColor: const Color(0xFF0E0E0E),
-              surfaceTintColor: Colors.transparent,
-              scrolledUnderElevation: 0,
-            ),
-            searchBarTheme: SearchBarThemeData(
-              backgroundColor: WidgetStatePropertyAll(
-                darkScheme.surfaceContainerHigh,
-              ),
-              elevation: const WidgetStatePropertyAll(0),
-              shape: WidgetStatePropertyAll(
-                RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
-            ),
-            bottomSheetTheme: const BottomSheetThemeData(
-              backgroundColor: Color(0xFF1A1A1A),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-            ),
-            snackBarTheme: SnackBarThemeData(
-              backgroundColor: darkScheme.surfaceContainerHighest,
-              contentTextStyle: TextStyle(color: darkScheme.onSurface),
-              actionTextColor: darkScheme.primary,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            pageTransitionsTheme: pageTransition,
-          ),
-          home: const AuthGate(),
         );
       },
     );

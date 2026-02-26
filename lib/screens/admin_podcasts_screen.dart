@@ -60,7 +60,7 @@ class _AdminPodcastsScreenState extends State<AdminPodcastsScreen> {
     final tt = Theme.of(context).textTheme;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0E0E0E),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       floatingActionButton: FloatingActionButton.small(
         backgroundColor: cs.primary,
         onPressed: () => _showSearchSheet(),
@@ -470,7 +470,7 @@ class _PodcastPreviewScreenState extends State<_PodcastPreviewScreen> {
     final tt = Theme.of(context).textTheme;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0E0E0E),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: Column(
           children: [
@@ -756,9 +756,8 @@ class _PodcastDetailScreenState extends State<_PodcastDetailScreen> with SingleT
 
   Future<void> _deleteEpisode(String episodeId, String epTitle) async {
     final yes = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
-      backgroundColor: const Color(0xFF2A2A2A),
-      title: const Text('Delete Episode?', style: TextStyle(color: Colors.white)),
-      content: Text('Delete "$epTitle"?', style: const TextStyle(color: Colors.white70)),
+      title: const Text('Delete Episode?'),
+      content: Text('Delete "$epTitle"?'),
       actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
         TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text('Delete', style: TextStyle(color: Colors.red.shade300)))],
     ));
@@ -779,7 +778,7 @@ class _PodcastDetailScreenState extends State<_PodcastDetailScreen> with SingleT
     final author = _metadata['author'] as String? ?? '';
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0E0E0E),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(child: Column(children: [
         // Back button
         Padding(padding: const EdgeInsets.fromLTRB(4, 4, 8, 0),
@@ -1077,7 +1076,7 @@ class _EpisodeDetailSheet extends StatelessWidget {
 
     return Container(
       constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.75),
-      decoration: const BoxDecoration(color: Color(0xFF1A1A1A), borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      decoration: BoxDecoration(color: Theme.of(context).bottomSheetTheme.backgroundColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         // Handle
         Center(child: Container(margin: const EdgeInsets.only(top: 12), width: 36, height: 4,
@@ -1231,7 +1230,7 @@ class _DownloadedEpisodeDetailSheet extends StatelessWidget {
 
     return Container(
       constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.75),
-      decoration: const BoxDecoration(color: Color(0xFF1A1A1A), borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      decoration: BoxDecoration(color: Theme.of(context).bottomSheetTheme.backgroundColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Center(child: Container(margin: const EdgeInsets.only(top: 12), width: 36, height: 4,
           decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(2)))),

@@ -21,19 +21,21 @@ void showCastDevicePicker(
   final cast = ChromecastService();
   showModalBottomSheet(
     context: context,
-    backgroundColor: const Color(0xFF1A1A1A),
+    backgroundColor: Theme.of(context).bottomSheetTheme.backgroundColor,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
-    builder: (ctx) => SafeArea(
+    builder: (ctx) {
+      final cs = Theme.of(ctx).colorScheme;
+      return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+            Container(width: 36, height: 4, decoration: BoxDecoration(color: cs.onSurface.withValues(alpha: 0.24), borderRadius: BorderRadius.circular(2))),
             const SizedBox(height: 16),
-            const Text('Cast to Device', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
+            Text('Cast to Device', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: cs.onSurface)),
             const SizedBox(height: 16),
             SizedBox(
               height: 200,
@@ -42,13 +44,13 @@ void showCastDevicePicker(
                 builder: (_, snap) {
                   final devices = snap.data ?? [];
                   if (devices.isEmpty) {
-                    return const Center(
+                    return Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white38)),
-                          SizedBox(height: 12),
-                          Text('Searching for Cast devices...', style: TextStyle(color: Colors.white38, fontSize: 13)),
+                          SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: cs.onSurfaceVariant)),
+                          const SizedBox(height: 12),
+                          Text('Searching for Cast devices...', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13)),
                         ],
                       ),
                     );
@@ -59,9 +61,9 @@ void showCastDevicePicker(
                     itemBuilder: (_, i) {
                       final device = devices[i];
                       return ListTile(
-                        leading: const Icon(Icons.cast_rounded, color: Colors.white54),
-                        title: Text(device.friendlyName, style: const TextStyle(color: Colors.white)),
-                        subtitle: Text(device.modelName ?? '', style: const TextStyle(color: Colors.white38, fontSize: 12)),
+                        leading: Icon(Icons.cast_rounded, color: cs.onSurfaceVariant),
+                        title: Text(device.friendlyName, style: TextStyle(color: cs.onSurface)),
+                        subtitle: Text(device.modelName ?? '', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12)),
                         onTap: () {
                           Navigator.pop(ctx);
                           cast.connectToDevice(device);
@@ -81,7 +83,8 @@ void showCastDevicePicker(
           ],
         ),
       ),
-    ),
+      );
+    },
   );
 }
 

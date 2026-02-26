@@ -48,28 +48,30 @@ class _CardPlaybackControlsState extends State<CardPlaybackControls> with Single
   }
 
   Widget _skipIcon(int seconds, bool isForward, {bool active = true}) {
+    final cs = Theme.of(context).colorScheme;
     final hasBuiltIn = [5, 10, 30].contains(seconds);
     if (hasBuiltIn) {
       IconData icon;
       if (isForward) { icon = seconds == 5 ? Icons.forward_5_rounded : seconds == 10 ? Icons.forward_10_rounded : Icons.forward_30_rounded; }
       else { icon = seconds == 5 ? Icons.replay_5_rounded : seconds == 10 ? Icons.replay_10_rounded : Icons.replay_30_rounded; }
-      return Icon(icon, size: 38, color: active ? Colors.white70 : Colors.white24);
+      return Icon(icon, size: 38, color: active ? cs.onSurface.withValues(alpha: 0.7) : cs.onSurface.withValues(alpha: 0.24));
     }
     return Stack(alignment: Alignment.center, children: [
-      Icon(isForward ? Icons.rotate_right_rounded : Icons.rotate_left_rounded, size: 38, color: active ? Colors.white70 : Colors.white24),
-      Padding(padding: const EdgeInsets.only(top: 2), child: Text('$seconds', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: active ? Colors.white : Colors.white24))),
+      Icon(isForward ? Icons.rotate_right_rounded : Icons.rotate_left_rounded, size: 38, color: active ? cs.onSurface.withValues(alpha: 0.7) : cs.onSurface.withValues(alpha: 0.24)),
+      Padding(padding: const EdgeInsets.only(top: 2), child: Text('$seconds', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: active ? cs.onSurface : cs.onSurface.withValues(alpha: 0.24)))),
     ]);
   }
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     if (widget.isStarting) {
       return SizedBox(height: 64,
         child: Center(child: SizedBox(width: 64, height: 64,
           child: Container(
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.white,
+              color: cs.onSurface,
               boxShadow: [BoxShadow(color: widget.accent.withValues(alpha: 0.4), blurRadius: 25, spreadRadius: -5)],
             ),
             child: Center(child: SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 2, color: widget.accent))),
@@ -98,6 +100,7 @@ class _CardPlaybackControlsState extends State<CardPlaybackControls> with Single
 
   /// Controls that route to ChromecastService
   Widget _buildCastControls(ChromecastService cast) {
+    final cs = Theme.of(context).colorScheme;
     final isPlaying = cast.isPlaying;
 
     if (isPlaying) {
@@ -112,7 +115,7 @@ class _CardPlaybackControlsState extends State<CardPlaybackControls> with Single
         GestureDetector(
           onTap: cast.skipToPreviousChapter,
           child: SizedBox(width: 40, height: 40, child: Center(
-            child: Icon(Icons.skip_previous_rounded, size: 24, color: Colors.white38),
+            child: Icon(Icons.skip_previous_rounded, size: 24, color: cs.onSurfaceVariant),
           )),
         ),
         const SizedBox(width: 4),
@@ -132,7 +135,7 @@ class _CardPlaybackControlsState extends State<CardPlaybackControls> with Single
                   width: 64, height: 64,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Colors.white,
+                    color: cs.onSurface,
                     boxShadow: [BoxShadow(color: widget.accent.withValues(alpha: 0.4), blurRadius: 25, spreadRadius: -5)],
                   ),
                   child: Center(
@@ -140,7 +143,7 @@ class _CardPlaybackControlsState extends State<CardPlaybackControls> with Single
                       icon: AnimatedIcons.play_pause,
                       progress: _playPauseController,
                       size: 34,
-                      color: Colors.black87,
+                      color: cs.surface,
                     ),
                   ),
                 ),
@@ -162,7 +165,7 @@ class _CardPlaybackControlsState extends State<CardPlaybackControls> with Single
         GestureDetector(
           onTap: cast.skipToNextChapter,
           child: SizedBox(width: 40, height: 40, child: Center(
-            child: Icon(Icons.skip_next_rounded, size: 24, color: Colors.white38),
+            child: Icon(Icons.skip_next_rounded, size: 24, color: cs.onSurfaceVariant),
           )),
         ),
       ],
@@ -171,6 +174,7 @@ class _CardPlaybackControlsState extends State<CardPlaybackControls> with Single
 
   /// Original local player controls
   Widget _buildLocalControls() {
+    final cs = Theme.of(context).colorScheme;
     return StreamBuilder<PlayerState>(
       stream: widget.isActive ? widget.player.playerStateStream : const Stream.empty(),
       builder: (_, snapshot) {
@@ -189,7 +193,7 @@ class _CardPlaybackControlsState extends State<CardPlaybackControls> with Single
             GestureDetector(
               onTap: widget.isActive ? widget.player.skipToPreviousChapter : null,
               child: SizedBox(width: 40, height: 40, child: Center(
-                child: Icon(Icons.skip_previous_rounded, size: 24, color: widget.isActive ? Colors.white38 : Colors.white12),
+                child: Icon(Icons.skip_previous_rounded, size: 24, color: widget.isActive ? cs.onSurfaceVariant : cs.onSurface.withValues(alpha: 0.12)),
               )),
             ),
             const SizedBox(width: 4),
@@ -209,7 +213,7 @@ class _CardPlaybackControlsState extends State<CardPlaybackControls> with Single
                       width: 64, height: 64,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Colors.white,
+                        color: cs.onSurface,
                         boxShadow: [BoxShadow(color: widget.accent.withValues(alpha: 0.4), blurRadius: 25, spreadRadius: -5)],
                       ),
                       child: isLoading
@@ -219,7 +223,7 @@ class _CardPlaybackControlsState extends State<CardPlaybackControls> with Single
                                 icon: AnimatedIcons.play_pause,
                                 progress: _playPauseController,
                                 size: 34,
-                                color: Colors.black87,
+                                color: cs.surface,
                               ),
                             ),
                     ),
@@ -236,7 +240,7 @@ class _CardPlaybackControlsState extends State<CardPlaybackControls> with Single
             GestureDetector(
               onTap: widget.isActive ? widget.player.skipToNextChapter : null,
               child: SizedBox(width: 40, height: 40, child: Center(
-                child: Icon(Icons.skip_next_rounded, size: 24, color: widget.isActive ? Colors.white38 : Colors.white12),
+                child: Icon(Icons.skip_next_rounded, size: 24, color: widget.isActive ? cs.onSurfaceVariant : cs.onSurface.withValues(alpha: 0.12)),
               )),
             ),
           ],

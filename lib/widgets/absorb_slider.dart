@@ -175,7 +175,7 @@ class _AbsorbTrackShape extends SliderTrackShape {
     canvas.drawCircle(
       Offset(trackRect.left + dotRadius + 2, centerY),
       dotRadius,
-      Paint()..color = Colors.white.withValues(alpha: 0.7),
+      Paint()..color = const Color(0xB3FFFFFF),
     );
 
     // Right dot
@@ -273,7 +273,7 @@ class AbsorbProgressPainter extends CustomPainter {
       canvas.drawCircle(
         Offset(trackLeft + 5, centerY),
         3,
-        Paint()..color = Colors.white.withValues(alpha: 0.7),
+        Paint()..color = const Color(0xB3FFFFFF),
       );
       canvas.drawCircle(
         Offset(trackRight - 5, centerY),
@@ -433,7 +433,7 @@ class _AbsorbRangeTrackShape extends RangeSliderTrackShape {
     final centerY = trackRect.center.dy;
     canvas.drawCircle(
       Offset(trackRect.left + 5, centerY), 3,
-      Paint()..color = Colors.white.withValues(alpha: 0.7),
+      Paint()..color = const Color(0xB3FFFFFF),
     );
     canvas.drawCircle(
       Offset(trackRect.right - 5, centerY), 3,

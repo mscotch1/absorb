@@ -136,6 +136,7 @@ class _CardDualProgressBarState extends State<CardDualProgressBar> with TickerPr
   @override
   Widget build(BuildContext context) {
     final tt = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
     final player = widget.player;
     final active = widget.isActive;
 
@@ -209,18 +210,18 @@ class _CardDualProgressBarState extends State<CardDualProgressBar> with TickerPr
               Padding(padding: const EdgeInsets.only(top: 2, bottom: 6), child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(_fmt(_bookDragValue != null ? _bookDragValue! * totalDur : posS), style: tt.labelSmall?.copyWith(color: _bookDragValue != null ? Colors.white70 : Colors.white54, fontSize: 12, fontWeight: FontWeight.w600, shadows: [Shadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 3)])),
-                  Text('-${_fmt(_bookDragValue != null ? (1.0 - _bookDragValue!) * totalDur : bookRemaining)}', style: tt.labelSmall?.copyWith(color: _bookDragValue != null ? Colors.white70 : Colors.white54, fontSize: 12, fontWeight: FontWeight.w600, shadows: [Shadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 3)])),
+                  Text(_fmt(_bookDragValue != null ? _bookDragValue! * totalDur : posS), style: tt.labelSmall?.copyWith(color: _bookDragValue != null ? cs.onSurface.withValues(alpha: 0.7) : cs.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w600, shadows: [Shadow(color: Theme.of(context).brightness == Brightness.dark ? Colors.black.withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.5), blurRadius: 3)])),
+                  Text('-${_fmt(_bookDragValue != null ? (1.0 - _bookDragValue!) * totalDur : bookRemaining)}', style: tt.labelSmall?.copyWith(color: _bookDragValue != null ? cs.onSurface.withValues(alpha: 0.7) : cs.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w600, shadows: [Shadow(color: Theme.of(context).brightness == Brightness.dark ? Colors.black.withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.5), blurRadius: 3)])),
                 ],
               )),
             ] else ...[
               Row(children: [
-                Text(_fmt(_bookDragValue != null ? _bookDragValue! * totalDur : posS), style: tt.labelSmall?.copyWith(color: _bookDragValue != null ? Colors.white60 : Colors.white38, fontSize: 11, fontWeight: FontWeight.w500)),
+                Text(_fmt(_bookDragValue != null ? _bookDragValue! * totalDur : posS), style: tt.labelSmall?.copyWith(color: _bookDragValue != null ? cs.onSurface.withValues(alpha: 0.6) : cs.onSurface.withValues(alpha: 0.38), fontSize: 11, fontWeight: FontWeight.w500)),
                 const SizedBox(width: 8),
                 Expanded(child: ClipRRect(borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(value: bookProgress, minHeight: 3, backgroundColor: Colors.white.withValues(alpha: 0.08), valueColor: AlwaysStoppedAnimation(widget.accent.withValues(alpha: 0.5))))),
+                  child: LinearProgressIndicator(value: bookProgress, minHeight: 3, backgroundColor: cs.onSurface.withValues(alpha: 0.08), valueColor: AlwaysStoppedAnimation(widget.accent.withValues(alpha: 0.5))))),
                 const SizedBox(width: 8),
-                Text('-${_fmt(_bookDragValue != null ? (1.0 - _bookDragValue!) * totalDur : bookRemaining)}', style: tt.labelSmall?.copyWith(color: _bookDragValue != null ? Colors.white60 : Colors.white38, fontSize: 11, fontWeight: FontWeight.w500)),
+                Text('-${_fmt(_bookDragValue != null ? (1.0 - _bookDragValue!) * totalDur : bookRemaining)}', style: tt.labelSmall?.copyWith(color: _bookDragValue != null ? cs.onSurface.withValues(alpha: 0.6) : cs.onSurface.withValues(alpha: 0.38), fontSize: 11, fontWeight: FontWeight.w500)),
               ]),
               const SizedBox(height: 10),
             ],
@@ -250,6 +251,7 @@ class _CardDualProgressBarState extends State<CardDualProgressBar> with TickerPr
                     wavePhase: 0,
                     isPlaying: isPlaying,
                     isDragging: isDragging,
+                    backgroundColor: cs.surfaceContainerHighest,
                   ),
                   child: Center(
                     child: Padding(
@@ -258,7 +260,7 @@ class _CardDualProgressBarState extends State<CardDualProgressBar> with TickerPr
                           ? MarqueeText(
                               text: chName,
                               style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.9),
+                                color: cs.onSurface.withValues(alpha: 0.9),
                                 fontWeight: FontWeight.w600,
                                 fontSize: 12,
                                 letterSpacing: 0.2,
@@ -276,12 +278,12 @@ class _CardDualProgressBarState extends State<CardDualProgressBar> with TickerPr
               children: [
                 Text(_fmt(_chapterDragValue != null ? (_chapterDragValue! * chapterDur) / speedDiv : chapterElapsed),
                   style: tt.labelSmall?.copyWith(
-                    color: _chapterDragValue != null ? widget.accent : Colors.white54,
+                    color: _chapterDragValue != null ? widget.accent : cs.onSurface.withValues(alpha: 0.54),
                     fontSize: 11, fontWeight: FontWeight.w600,
                     fontFeatures: const [FontFeature.tabularFigures()])),
                 Text('-${_fmt(_chapterDragValue != null ? ((1.0 - _chapterDragValue!) * chapterDur) / speedDiv : chapterRemaining)}',
                   style: tt.labelSmall?.copyWith(
-                    color: _chapterDragValue != null ? widget.accent : Colors.white38,
+                    color: _chapterDragValue != null ? widget.accent : cs.onSurface.withValues(alpha: 0.38),
                     fontSize: 11, fontWeight: FontWeight.w500,
                     fontFeatures: const [FontFeature.tabularFigures()])),
               ],
@@ -323,6 +325,7 @@ class ChapterPillPainter extends CustomPainter {
   final double wavePhase;
   final bool isPlaying;
   final bool isDragging;
+  final Color backgroundColor;
 
   ChapterPillPainter({
     required this.progress,
@@ -330,6 +333,7 @@ class ChapterPillPainter extends CustomPainter {
     required this.wavePhase,
     required this.isPlaying,
     required this.isDragging,
+    required this.backgroundColor,
   });
 
   @override
@@ -346,7 +350,7 @@ class ChapterPillPainter extends CustomPainter {
     );
 
     // Background
-    canvas.drawRRect(pillRect, Paint()..color = const Color(0xFF1A1A1A));
+    canvas.drawRRect(pillRect, Paint()..color = backgroundColor);
 
     // Border
     canvas.drawRRect(
@@ -428,7 +432,8 @@ class ChapterPillPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant ChapterPillPainter old) =>
       old.progress != progress ||
-      old.isDragging != isDragging;
+      old.isDragging != isDragging ||
+      old.backgroundColor != backgroundColor;
 }
 
 // ─── MARQUEE TEXT ────────────────────────────────────────────
