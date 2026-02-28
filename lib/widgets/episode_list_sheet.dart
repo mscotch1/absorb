@@ -253,10 +253,12 @@ class _EpisodeListSheetState extends State<EpisodeListSheet> {
           Center(child: Container(width: 40, height: 4, margin: const EdgeInsets.only(top: 8, bottom: 4),
             decoration: BoxDecoration(color: cs.onSurface.withValues(alpha: 0.24), borderRadius: BorderRadius.circular(2)))),
 
-          // ── Header (non-scrollable) ──
-          Padding(
+          // ── Header (shrinks when sheet is small) ──
+          Flexible(
+            flex: 0,
+            child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-            child: Column(children: [
+            child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
               // Show title (centered)
               Text(_title, textAlign: TextAlign.center,
                 style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w700, color: cs.onSurface)),
@@ -380,7 +382,8 @@ class _EpisodeListSheetState extends State<EpisodeListSheet> {
                 child: Text('Episodes', style: tt.titleSmall?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w600)),
               ),
               const SizedBox(height: 4),
-            ]),
+            ])),
+          ),
           ),
 
           // ── Scrollable episode list ──

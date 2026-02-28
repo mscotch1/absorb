@@ -494,7 +494,11 @@ class _ContinueListeningCardState extends State<_ContinueListeningCard> {
     return GestureDetector(
       onTap: () {
         if (lib.isPodcastLibrary) {
-          EpisodeListSheet.show(context, item);
+          if (recentEpisode != null) {
+            EpisodeDetailSheet.show(context, item, recentEpisode);
+          } else {
+            EpisodeListSheet.show(context, item);
+          }
         } else {
           showBookDetailSheet(context, itemId);
         }
