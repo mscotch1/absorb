@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers/library_provider.dart';
 import '../services/audio_player_service.dart';
 import '../services/download_service.dart';
+import '../services/scoped_prefs.dart';
 import '../widgets/absorb_page_header.dart';
 import '../widgets/absorbing_card.dart';
 
@@ -30,6 +31,14 @@ class _AbsorbingScreenState extends State<AbsorbingScreen> {
   void initState() {
     super.initState();
     _player.addListener(_rebuild);
+    _restoreLastFinished();
+  }
+
+  Future<void> _restoreLastFinished() async {
+    final saved = await ScopedPrefs.getString('absorbing_last_finished');
+    if (saved != null && saved.isNotEmpty && mounted) {
+      setState(() => _lastFinishedId = saved);
+    }
   }
 
   @override
@@ -82,6 +91,7 @@ class _AbsorbingScreenState extends State<AbsorbingScreen> {
             ? '$wasPlayingId-$wasEpisodeId'
             : wasPlayingId;
         _lastFinishedId = finishedKey;
+        ScopedPrefs.setString('absorbing_last_finished', finishedKey);
       }
     }
     setState(() {});
@@ -134,6 +144,7 @@ class _AbsorbingScreenState extends State<AbsorbingScreen> {
       _lastFinishedId = epId != null
           ? '${_player.currentItemId!}-$epId'
           : _player.currentItemId!;
+      ScopedPrefs.setString('absorbing_last_finished', _lastFinishedId!);
     }
     setState(() => _isSyncing = true);
     if (_player.hasBook) {
