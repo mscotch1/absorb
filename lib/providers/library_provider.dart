@@ -652,20 +652,36 @@ class LibraryProvider extends ChangeNotifier {
 
   Set<String> _manualAbsorbAdds = {};
   Set<String> _manualAbsorbRemoves = {};
-  // Persisted set of all book IDs ever shown on the absorbing page
-  Set<String> _absorbingBookIds = {};
+  // Persisted ordered list of all book IDs on the absorbing page
+  List<String> _absorbingBookIds = [];
   // Cached item data for books that may no longer be in server sections
   Map<String, Map<String, dynamic>> _absorbingItemCache = {};
+  // Track last finished item so we can insert next-in-series after it
+  String? _lastFinishedItemId;
 
   Set<String> get manualAbsorbAdds => _manualAbsorbAdds;
   Set<String> get manualAbsorbRemoves => _manualAbsorbRemoves;
-  Set<String> get absorbingBookIds => _absorbingBookIds;
+  List<String> get absorbingBookIds => _absorbingBookIds;
+
+  /// Add a key to _absorbingBookIds if not already present.
+  /// If [afterKey] is provided and exists, insert right after it.
+  void _absorbingIdsAdd(String key, {String? afterKey}) {
+    if (_absorbingBookIds.contains(key)) return;
+    if (afterKey != null) {
+      final idx = _absorbingBookIds.indexOf(afterKey);
+      if (idx >= 0) {
+        _absorbingBookIds.insert(idx + 1, key);
+        return;
+      }
+    }
+    _absorbingIdsAdd(key);
+  }
   Map<String, Map<String, dynamic>> get absorbingItemCache => _absorbingItemCache;
 
   Future<void> _loadManualAbsorbing() async {
     _manualAbsorbAdds = (await ScopedPrefs.getStringList('absorbing_manual_adds')).toSet();
     _manualAbsorbRemoves = (await ScopedPrefs.getStringList('absorbing_manual_removes')).toSet();
-    _absorbingBookIds = (await ScopedPrefs.getStringList('absorbing_seen_ids')).toSet();
+    _absorbingBookIds = (await ScopedPrefs.getStringList('absorbing_seen_ids')).toList();
     final cacheList = await ScopedPrefs.getStringList('absorbing_item_cache_v2');
     _absorbingItemCache = {};
     for (final s in cacheList) {
@@ -704,6 +720,8 @@ class LibraryProvider extends ChangeNotifier {
       final id = section['id'] as String? ?? '';
       if (id == 'continue-listening' || id == 'continue-series' ||
           id == 'downloaded-books') {
+        // For continue-series items, insert right after the finished book
+        final insertAfter = id == 'continue-series' ? _lastFinishedItemId : null;
         for (final e in (section['entities'] as List<dynamic>? ?? [])) {
           if (e is Map<String, dynamic>) {
             final itemId = e['id'] as String?;
@@ -717,7 +735,7 @@ class LibraryProvider extends ChangeNotifier {
                 allowedKeys.add(key);
                 showEntities[itemId] = e;
                 if (!_manualAbsorbRemoves.contains(key)) {
-                  _absorbingBookIds.add(key);
+                  _absorbingIdsAdd(key, afterKey: insertAfter);
                   _absorbingItemCache[key] = {...e, '_absorbingKey': key};
                 }
               }
@@ -725,7 +743,7 @@ class LibraryProvider extends ChangeNotifier {
               // Book — use plain itemId
               allowedKeys.add(itemId);
               if (!_manualAbsorbRemoves.contains(itemId)) {
-                _absorbingBookIds.add(itemId);
+                _absorbingIdsAdd(itemId, afterKey: insertAfter);
                 _absorbingItemCache[itemId] = e;
               }
             }
@@ -784,7 +802,7 @@ class LibraryProvider extends ChangeNotifier {
           'title': 'Episode',
         };
         syntheticEntry['_absorbingKey'] = key;
-        _absorbingBookIds.add(key);
+        _absorbingIdsAdd(key);
         _absorbingItemCache[key] = syntheticEntry;
         allowedKeys.add(key);
       }
@@ -833,7 +851,7 @@ class LibraryProvider extends ChangeNotifier {
       _absorbingItemCache.remove(old);
     }
     for (final entry in migrateAdd.entries) {
-      _absorbingBookIds.add(entry.key);
+      _absorbingIdsAdd(entry.key);
       _absorbingItemCache[entry.key] = entry.value;
     }
 
@@ -886,7 +904,7 @@ class LibraryProvider extends ChangeNotifier {
   Future<void> addToAbsorbing(String itemId) async {
     _manualAbsorbAdds.add(itemId);
     _manualAbsorbRemoves.remove(itemId);
-    _absorbingBookIds.add(itemId);
+    _absorbingIdsAdd(itemId);
     await _saveManualAbsorbing();
     notifyListeners();
   }
@@ -897,7 +915,7 @@ class LibraryProvider extends ChangeNotifier {
   void unblockFromAbsorbing(String key) {
     bool changed = _manualAbsorbRemoves.remove(key);
     if (!_absorbingBookIds.contains(key)) {
-      _absorbingBookIds.add(key);
+      _absorbingIdsAdd(key);
       changed = true;
       // Populate the cache from current sections if available
       final isCompound = key.contains('-');
@@ -931,12 +949,18 @@ class LibraryProvider extends ChangeNotifier {
 
   /// Mark an item as finished locally so the overlay appears immediately,
   /// before the next server refresh confirms isFinished.
+  /// Then refresh sections so next-in-series appears without navigating away.
   void markFinishedLocally(String itemId) {
     if (_resetItems.contains(itemId)) return;
     final existing = _progressMap[itemId] ?? {};
     _progressMap[itemId] = {...existing, 'isFinished': true};
     _localProgressOverrides[itemId] = 1.0;
+    _lastFinishedItemId = itemId;
     notifyListeners();
+    // Refresh sections so continue-series items appear immediately
+    if (_api != null && _selectedLibraryId != null && !isOffline) {
+      loadPersonalizedView();
+    }
   }
 
   /// Check if a book/episode is on the absorbing page (persisted local list, not removed).

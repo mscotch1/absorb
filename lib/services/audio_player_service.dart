@@ -680,7 +680,9 @@ class AudioPlayerService extends ChangeNotifier {
         androidNotificationChannelId: 'com.audiobookshelf.app.channel.audio',
         androidNotificationChannelName: 'Absorb',
         androidNotificationOngoing: true,
-        androidStopForegroundOnPause: true,
+        // Keep foreground service alive when paused — prevents Android from
+        // killing audio after notification interruptions on locked screen.
+        androidStopForegroundOnPause: false,
         androidNotificationIcon: 'drawable/ic_notification',
         androidBrowsableRootExtras: {
           AndroidContentStyle.supportedKey: true,
@@ -715,7 +717,12 @@ class AudioPlayerService extends ChangeNotifier {
       if (event.begin) {
         if (service.isPlaying) {
           debugPrint('[AudioSession] Interrupted (${event.type}) — pausing');
-          await service.pause();
+          // Pause the underlying player directly — NOT service.pause() —
+          // to keep the interruption lightweight. service.pause() saves progress,
+          // syncs to server, clears _wasPlayingBeforeInterrupt, and sets
+          // _lastPauseTime (triggering auto-rewind on resume). For transient
+          // notification interruptions we just need to duck the audio briefly.
+          await service._player?.pause();
           service._wasPlayingBeforeInterrupt = true;
         }
       } else {

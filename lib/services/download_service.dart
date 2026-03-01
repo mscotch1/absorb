@@ -137,6 +137,14 @@ class DownloadService extends ChangeNotifier {
     return '${appDir.path}/downloads';
   }
 
+  /// Always returns the internal app directory for cover caching.
+  /// Covers are stored here even when audio uses a custom external path,
+  /// because external storage may have permission restrictions.
+  Future<String> get _internalBasePath async {
+    final appDir = await getApplicationDocumentsDirectory();
+    return '${appDir.path}/downloads';
+  }
+
   /// Set a custom download location. Pass null to revert to default.
   Future<void> setCustomDownloadPath(String? path) async {
     _customDownloadPath = path;
@@ -281,31 +289,39 @@ class DownloadService extends ChangeNotifier {
         }
       }
 
-      // Cache cover locally if not already cached
+      // Cache cover in internal storage if not already cached
       if (localCoverPath == null || !File(localCoverPath).existsSync()) {
-        final basePath = await downloadBasePath;
-        final existingCover = File('$basePath/${info.itemId}/cover.jpg');
+        final internalBase = await _internalBasePath;
+        final existingCover = File('$internalBase/${info.itemId}/cover.jpg');
         if (existingCover.existsSync()) {
           // Already on disk from a previous download, just not tracked
           localCoverPath = existingCover.path;
           needsUpdate = true;
         } else {
-          // Try to download from server
-          final url = coverUrl ?? api.getCoverUrl(apiItemId);
-          try {
-            final resp = await http.get(Uri.parse(url), headers: api.mediaHeaders)
-                .timeout(const Duration(seconds: 10));
-            if (resp.statusCode == 200 && resp.bodyBytes.isNotEmpty) {
-              final dir = Directory('$basePath/${info.itemId}');
-              if (!dir.existsSync()) dir.createSync(recursive: true);
-              final coverFile = File('${dir.path}/cover.jpg');
-              await coverFile.writeAsBytes(resp.bodyBytes);
-              localCoverPath = coverFile.path;
-              needsUpdate = true;
-              debugPrint('[Download] Cached cover for ${info.itemId}');
+          // Also check the custom download path (old downloads may have cover there)
+          final basePath = await downloadBasePath;
+          final oldCover = File('$basePath/${info.itemId}/cover.jpg');
+          if (oldCover.existsSync()) {
+            localCoverPath = oldCover.path;
+            needsUpdate = true;
+          } else {
+            // Download from server into internal storage
+            final url = coverUrl ?? api.getCoverUrl(apiItemId);
+            try {
+              final resp = await http.get(Uri.parse(url), headers: api.mediaHeaders)
+                  .timeout(const Duration(seconds: 10));
+              if (resp.statusCode == 200 && resp.bodyBytes.isNotEmpty) {
+                final dir = Directory('$internalBase/${info.itemId}');
+                if (!dir.existsSync()) dir.createSync(recursive: true);
+                final coverFile = File('${dir.path}/cover.jpg');
+                await coverFile.writeAsBytes(resp.bodyBytes);
+                localCoverPath = coverFile.path;
+                needsUpdate = true;
+                debugPrint('[Download] Cached cover for ${info.itemId}');
+              }
+            } catch (e) {
+              debugPrint('[Download] Cover cache failed for ${info.itemId}: $e');
             }
-          } catch (e) {
-            debugPrint('[Download] Cover cache failed for ${info.itemId}: $e');
           }
         }
       }
@@ -352,7 +368,7 @@ class DownloadService extends ChangeNotifier {
   }
 
   /// Get the local cover file path for a downloaded item.
-  /// Checks the persisted path first, then probes disk for cover.jpg.
+  /// Checks the persisted path first, then probes internal and download dirs.
   Future<String?> getLocalCoverPath(String itemId) async {
     final info = _downloads[itemId];
     if (info == null || info.status != DownloadStatus.downloaded) return null;
@@ -362,10 +378,17 @@ class DownloadService extends ChangeNotifier {
       return info.localCoverPath;
     }
 
-    // Probe disk (handles old downloads before cover caching was added)
+    // Check internal storage (where covers are now cached)
+    final internalBase = await _internalBasePath;
+    final internalCover = File('$internalBase/$itemId/cover.jpg');
+    if (internalCover.existsSync()) return internalCover.path;
+
+    // Check custom download path (old downloads may have cover there)
     final basePath = await downloadBasePath;
-    final coverFile = File('$basePath/$itemId/cover.jpg');
-    if (coverFile.existsSync()) return coverFile.path;
+    if (basePath != internalBase) {
+      final customCover = File('$basePath/$itemId/cover.jpg');
+      if (customCover.existsSync()) return customCover.path;
+    }
 
     return null;
   }
@@ -487,14 +510,18 @@ class DownloadService extends ChangeNotifier {
         bookDir.createSync(recursive: true);
       }
 
-      // Cache the cover image locally for offline use (Android Auto, etc.)
+      // Cache the cover image in internal storage for offline use (lockscreen, Android Auto).
+      // Always use internal path — custom external paths may lack write permission.
       String? localCoverPath;
       if (coverUrl != null && coverUrl.isNotEmpty) {
         try {
           final coverResp = await http.get(Uri.parse(coverUrl), headers: api.mediaHeaders)
               .timeout(const Duration(seconds: 10));
           if (coverResp.statusCode == 200 && coverResp.bodyBytes.isNotEmpty) {
-            final coverFile = File('${bookDir.path}/cover.jpg');
+            final internalBase = await _internalBasePath;
+            final coverDir = Directory('$internalBase/$itemId');
+            if (!coverDir.existsSync()) coverDir.createSync(recursive: true);
+            final coverFile = File('${coverDir.path}/cover.jpg');
             await coverFile.writeAsBytes(coverResp.bodyBytes);
             localCoverPath = coverFile.path;
             debugPrint('[Download] Cached cover image: $localCoverPath');
