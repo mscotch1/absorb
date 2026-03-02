@@ -593,9 +593,13 @@ class _BookDetailSheetContentState extends State<_BookDetailSheetContent> {
     final rootNav = Navigator.of(context, rootNavigator: true);
 
     // Ensure this book is on the absorbing list (clear any manual remove)
+    // Clear finished state so the overlay disappears immediately
     if (context.mounted) {
       final lib = context.read<LibraryProvider>();
       lib.addToAbsorbing(widget.itemId);
+      if (lib.getProgressData(widget.itemId)?['isFinished'] == true) {
+        lib.resetProgressFor(widget.itemId);
+      }
     }
     
     if (player.currentItemId == widget.itemId) {
